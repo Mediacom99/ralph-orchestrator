@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../api/client";
 
 interface LiveLogProps {
@@ -21,20 +21,19 @@ export default function LiveLog({ loopId, onClose }: LiveLogProps) {
     return () => window.removeEventListener("keydown", handleKey);
   }, [onClose]);
 
-  const fetchLogs = useCallback(async () => {
-    try {
-      const data = await api.getLogs(loopId, 200);
-      setContent(data.content || "(empty)");
-    } catch {
-      setContent("(no logs available)");
-    }
-  }, [loopId]);
-
   useEffect(() => {
-    fetchLogs();
-    const t = setInterval(fetchLogs, 3000);
-    return () => clearInterval(t);
-  }, [fetchLogs]);
+    const ac = new AbortController();
+    const doFetch = () => {
+      api.getLogs(loopId, 200, ac.signal)
+        .then((data) => setContent(data.content || "(empty)"))
+        .catch(() => {
+          if (!ac.signal.aborted) setContent("(no logs available)");
+        });
+    };
+    doFetch();
+    const t = setInterval(doFetch, 3000);
+    return () => { ac.abort(); clearInterval(t); };
+  }, [loopId]);
 
   useEffect(() => {
     if (autoScroll) {

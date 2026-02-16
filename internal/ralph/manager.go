@@ -59,6 +59,13 @@ func (m *Manager) GetRunner(loopID string) *Runner {
 	return m.runners[loopID]
 }
 
+// Remove deletes a runner entry from the map. Call this when a loop is deleted.
+func (m *Manager) Remove(loopID string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.runners, loopID)
+}
+
 func (m *Manager) StopAll(ctx context.Context) {
 	m.mu.RLock()
 	runners := make([]*Runner, 0, len(m.runners))

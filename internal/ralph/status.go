@@ -145,6 +145,11 @@ type enrichEntry struct {
 	fetchedAt   time.Time
 }
 
+// EvictCache removes cached enrichment data for a given local path.
+func EvictCache(localPath string) {
+	enrichCache.Delete(localPath)
+}
+
 // EnrichLoop populates the live status fields on a Loop by reading .ralph/ files.
 func EnrichLoop(loop *store.Loop) {
 	if loop.LocalPath == "" {

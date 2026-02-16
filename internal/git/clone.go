@@ -9,10 +9,18 @@ import (
 	"path"
 	"regexp"
 	"strings"
+	"time"
 )
 
 func Clone(ctx context.Context, gitURL, targetDir string) error {
 	cmd := exec.CommandContext(ctx, "git", "clone", gitURL, targetDir)
+	// Mitigate DNS rebinding: disable HTTP redirects so an attacker cannot
+	// redirect git to an internal address after the SSRF check passes.
+	cmd.Env = append(cmd.Environ(),
+		"GIT_CONFIG_COUNT=1",
+		"GIT_CONFIG_KEY_0=http.followRedirects",
+		"GIT_CONFIG_VALUE_0=false",
+	)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("git clone failed: %w\n%s", err, string(output))
@@ -54,26 +62,37 @@ func isPrivateIP(ip net.IP) bool {
 }
 
 func ValidateURL(rawURL string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
 	if strings.HasPrefix(rawURL, "git@") {
 		if !sshURLPattern.MatchString(rawURL) {
 			return fmt.Errorf("invalid SSH URL format, expected git@host:path")
 		}
-		return nil
+		// Extract hostname from git@hostname:path and check for SSRF.
+		host := rawURL[len("git@"):]
+		if idx := strings.Index(host, ":"); idx > 0 {
+			host = host[:idx]
+		}
+		return checkHostSSRF(ctx, host)
 	}
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return fmt.Errorf("invalid URL: %w", err)
 	}
-	if u.Scheme != "https" && u.Scheme != "http" {
+	if u.Scheme != "https" {
 		return fmt.Errorf("URL must use https:// or git@ format")
 	}
 	if u.Host == "" {
 		return fmt.Errorf("URL missing host")
 	}
 
-	// SSRF protection: block URLs that resolve to private/internal addresses.
-	host := u.Hostname()
-	ips, err := net.LookupHost(host)
+	return checkHostSSRF(ctx, u.Hostname())
+}
+
+// checkHostSSRF resolves a hostname and blocks private/internal addresses.
+func checkHostSSRF(ctx context.Context, host string) error {
+	ips, err := net.DefaultResolver.LookupHost(ctx, host)
 	if err != nil {
 		return fmt.Errorf("cannot resolve host %q: %w", host, err)
 	}
@@ -82,7 +101,6 @@ func ValidateURL(rawURL string) error {
 			return fmt.Errorf("URL resolves to a private network address")
 		}
 	}
-
 	return nil
 }
 

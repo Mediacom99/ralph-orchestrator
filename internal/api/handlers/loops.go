@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -104,36 +105,42 @@ func (h *LoopHandler) cloneAndStart(loop *store.Loop, autoStart bool) {
 	ctx, cancel := context.WithTimeout(h.ctx, h.config.CloneTimeout)
 	defer cancel()
 
-	h.logger.Info("cloning repo", "loop_id", loop.ID, "url", loop.GitURL)
+	loopID := loop.ID
+	h.logger.Info("cloning repo", "loop_id", loopID, "url", loop.GitURL)
 
 	if err := gitpkg.Clone(ctx, loop.GitURL, loop.LocalPath); err != nil {
-		h.logger.Error("clone failed", "loop_id", loop.ID, "error", err)
-		loop.Status = store.StatusError
-		if err := h.store.Save(loop); err != nil {
-			h.logger.Error("failed to save loop state", "loop_id", loop.ID, "error", err)
+		h.logger.Error("clone failed", "loop_id", loopID, "error", err)
+		if err := h.store.Update(loopID, func(l *store.Loop) { l.Status = store.StatusError }); err != nil {
+			h.logger.Warn("loop gone during clone error update", "loop_id", loopID)
+			return
 		}
-		h.bus.Publish(events.Event{Type: "clone_failed", LoopID: loop.ID, Data: err.Error()})
+		h.bus.Publish(events.Event{Type: "clone_failed", LoopID: loopID, Data: err.Error()})
 		return
 	}
 
 	if !ralph.IsRepoEnabled(loop.LocalPath) {
-		h.logger.Warn("repo not ralph-enabled", "loop_id", loop.ID)
-		loop.Status = store.StatusError
-		if err := h.store.Save(loop); err != nil {
-			h.logger.Error("failed to save loop state", "loop_id", loop.ID, "error", err)
+		h.logger.Warn("repo not ralph-enabled", "loop_id", loopID)
+		if err := h.store.Update(loopID, func(l *store.Loop) { l.Status = store.StatusError }); err != nil {
+			h.logger.Warn("loop gone during clone error update", "loop_id", loopID)
+			return
 		}
-		h.bus.Publish(events.Event{Type: "clone_failed", LoopID: loop.ID, Data: "repo has no .ralph/ or .ralphrc — not ralph-enabled"})
+		h.bus.Publish(events.Event{Type: "clone_failed", LoopID: loopID, Data: "repo has no .ralph/ or .ralphrc — not ralph-enabled"})
 		return
 	}
 
-	loop.Status = store.StatusStopped
-	if err := h.store.Save(loop); err != nil {
-		h.logger.Error("failed to save loop state", "loop_id", loop.ID, "error", err)
+	if err := h.store.Update(loopID, func(l *store.Loop) { l.Status = store.StatusStopped }); err != nil {
+		h.logger.Warn("loop gone after successful clone", "loop_id", loopID)
+		return
 	}
-	h.bus.Publish(events.Event{Type: "clone_complete", LoopID: loop.ID})
+	h.bus.Publish(events.Event{Type: "clone_complete", LoopID: loopID})
 
 	if autoStart {
-		h.startLoop(loop)
+		// Re-read the loop from store to get fresh state.
+		fresh, ok := h.store.Get(loopID)
+		if !ok {
+			return
+		}
+		h.startLoop(fresh)
 	}
 }
 
@@ -158,19 +165,19 @@ func (h *LoopHandler) startLoop(loop *store.Loop) {
 	runner, err := h.mgr.Start(context.Background(), loop.ID, loop.LocalPath)
 	if err != nil {
 		h.logger.Error("failed to start ralph", "loop_id", loop.ID, "error", err)
-		loop.Status = store.StatusFailed
-		if err := h.store.Save(loop); err != nil {
-			h.logger.Error("failed to save loop state", "loop_id", loop.ID, "error", err)
-		}
+		_ = h.store.Update(loop.ID, func(l *store.Loop) { l.Status = store.StatusFailed })
 		return
 	}
 
-	now := time.Now()
-	loop.Status = store.StatusRunning
-	loop.StartedAt = &now
-	loop.PID = runner.PID()
-	if err := h.store.Save(loop); err != nil {
-		h.logger.Error("failed to save loop state", "loop_id", loop.ID, "error", err)
+	pid := runner.PID()
+	err = h.store.Update(loop.ID, func(l *store.Loop) {
+		now := time.Now()
+		l.Status = store.StatusRunning
+		l.StartedAt = &now
+		l.PID = pid
+	})
+	if err != nil {
+		h.logger.Error("failed to update loop state", "loop_id", loop.ID, "error", err)
 	}
 	h.bus.Publish(events.Event{Type: "loop_started", LoopID: loop.ID})
 
@@ -208,6 +215,15 @@ func (h *LoopHandler) Stop(c *fiber.Ctx) error {
 		h.logger.Error("failed to stop loop", "loop_id", id, "error", err)
 		return c.Status(500).JSON(fiber.Map{"error": "failed to stop loop"})
 	}
+	// Update store synchronously so the response reflects the stopped state.
+	// The exit-watcher goroutine may also update, but Store.Update is atomic
+	// and both writes produce the same result.
+	_ = h.store.Update(id, func(l *store.Loop) {
+		now := time.Now()
+		l.StoppedAt = &now
+		l.PID = 0
+		l.Status = store.StatusStopped
+	})
 	return c.JSON(fiber.Map{"status": "stopped"})
 }
 
@@ -231,10 +247,20 @@ func (h *LoopHandler) Delete(c *fiber.Ctx) error {
 		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
 	}
 
-	// Remove repo directory
+	// Clean up runner map entry and enrichment cache.
+	h.mgr.Remove(id)
+	ralph.EvictCache(loop.LocalPath)
+
+	// Remove repo directory — verify it's under DataDir to prevent accidental
+	// deletion of unrelated paths if the store data is corrupted.
 	if loop.LocalPath != "" {
-		if err := os.RemoveAll(loop.LocalPath); err != nil {
-			h.logger.Error("failed to remove repo directory", "loop_id", id, "path", loop.LocalPath, "error", err)
+		absPath, err := filepath.Abs(loop.LocalPath)
+		if err == nil && strings.HasPrefix(absPath, filepath.Clean(h.config.DataDir)+string(filepath.Separator)) {
+			if err := os.RemoveAll(absPath); err != nil {
+				h.logger.Error("failed to remove repo directory", "loop_id", id, "path", absPath, "error", err)
+			}
+		} else {
+			h.logger.Error("refusing to remove path outside data dir", "loop_id", id, "path", loop.LocalPath, "data_dir", h.config.DataDir)
 		}
 	}
 

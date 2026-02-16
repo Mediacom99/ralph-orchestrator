@@ -36,11 +36,12 @@ export default function LoopCard({ loop, onRefresh }: LoopCardProps) {
     setError(null);
     try {
       await api.startLoop(loop.id);
+      await onRefresh();
     } catch (err) {
       if (mountedRef.current) setError(err instanceof Error ? err.message : "Action failed");
+    } finally {
+      if (mountedRef.current) setActing(false);
     }
-    await onRefresh();
-    if (mountedRef.current) setActing(false);
   }
 
   async function handleStop() {
@@ -48,11 +49,12 @@ export default function LoopCard({ loop, onRefresh }: LoopCardProps) {
     setError(null);
     try {
       await api.stopLoop(loop.id);
+      await onRefresh();
     } catch (err) {
       if (mountedRef.current) setError(err instanceof Error ? err.message : "Action failed");
+    } finally {
+      if (mountedRef.current) setActing(false);
     }
-    await onRefresh();
-    if (mountedRef.current) setActing(false);
   }
 
   async function handleDelete() {
@@ -62,11 +64,12 @@ export default function LoopCard({ loop, onRefresh }: LoopCardProps) {
     setError(null);
     try {
       await api.deleteLoop(loop.id);
+      await onRefresh();
     } catch (err) {
       if (mountedRef.current) setError(err instanceof Error ? err.message : "Action failed");
+    } finally {
+      if (mountedRef.current) setActing(false);
     }
-    await onRefresh();
-    if (mountedRef.current) setActing(false);
   }
 
   const isRunning = loop.status === "running";

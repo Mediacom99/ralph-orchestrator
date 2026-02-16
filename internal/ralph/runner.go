@@ -82,7 +82,11 @@ func (r *Runner) Stop() error {
 	// I1: If another goroutine is already stopping, just wait for completion.
 	if r.stopping {
 		r.mu.Unlock()
-		<-r.done
+		select {
+		case <-r.done:
+		case <-time.After(15 * time.Second):
+			return fmt.Errorf("timed out waiting for concurrent stop")
+		}
 		return nil
 	}
 	r.stopping = true
@@ -113,7 +117,12 @@ func (r *Runner) Stop() error {
 		}
 	}
 	r.mu.Unlock()
-	<-r.done
+	select {
+	case <-r.done:
+	case <-time.After(5 * time.Second):
+		// Process didn't die after SIGKILL — give up to avoid leaking goroutines.
+		return fmt.Errorf("process did not exit after SIGKILL")
+	}
 	return nil
 }
 

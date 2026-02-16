@@ -13,7 +13,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       signal: init?.signal ?? controller.signal,
       headers: {
         ...(init?.body != null ? { "Content-Type": "application/json" } : {}),
-        ...(init?.headers as Record<string, string>),
+        ...Object.fromEntries(new Headers(init?.headers)),
       },
     });
     if (!res.ok) {
@@ -52,6 +52,6 @@ export const api = {
   deleteLoop: (id: string) =>
     request<void>(`/loops/${id}`, { method: "DELETE" }),
 
-  getLogs: (id: string, lines = 100) =>
-    request<{ content: string }>(`/loops/${id}/logs?lines=${lines}`),
+  getLogs: (id: string, lines = 100, signal?: AbortSignal) =>
+    request<{ content: string }>(`/loops/${id}/logs?lines=${lines}`, { signal }),
 };

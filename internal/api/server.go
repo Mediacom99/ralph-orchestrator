@@ -29,6 +29,13 @@ func NewServer(ctx context.Context, cfg *config.Config, st *store.Store, mgr *ra
 	})
 
 	app.Use(recover.New())
+	// Security headers
+	app.Use(func(c *fiber.Ctx) error {
+		c.Set("X-Frame-Options", "DENY")
+		c.Set("X-Content-Type-Options", "nosniff")
+		c.Set("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' ws: wss:")
+		return c.Next()
+	})
 	// I6: Restrict CORS to configured origins (default: localhost).
 	app.Use(cors.New(cors.Config{
 		AllowOrigins: cfg.AllowedOrigins,

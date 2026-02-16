@@ -39,7 +39,10 @@ func (s *Server) setupSPA() {
 		Root: http.FS(distFS),
 	})
 
-	indexHTML, _ := fs.ReadFile(distFS, "index.html")
+	indexHTML, err2 := fs.ReadFile(distFS, "index.html")
+	if err2 != nil {
+		s.logger.Warn("failed to read embedded index.html", "error", err2)
+	}
 
 	s.app.Use(func(c *fiber.Ctx) error {
 		path := c.Path()
