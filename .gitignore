@@ -1,0 +1,19 @@
+# Binary
+/orchestrator
+
+# Data
+data/
+
+# Environment
+.env
+
+# OS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+
+# Frontend
+web/node_modules/
+web/dist/

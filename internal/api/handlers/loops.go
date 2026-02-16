@@ -1,0 +1,264 @@
+package handlers
+
+import (
+	"context"
+	"log/slog"
+	"os"
+	"path/filepath"
+	"strconv"
+	"time"
+
+	"github.com/gofiber/fiber/v2"
+	"github.com/google/uuid"
+
+	"github.com/edoardo/ralph-orchestrator/internal/config"
+	"github.com/edoardo/ralph-orchestrator/internal/events"
+	gitpkg "github.com/edoardo/ralph-orchestrator/internal/git"
+	"github.com/edoardo/ralph-orchestrator/internal/ralph"
+	"github.com/edoardo/ralph-orchestrator/internal/store"
+)
+
+type LoopHandler struct {
+	store  *store.Store
+	mgr    *ralph.Manager
+	bus    *events.EventBus
+	config *config.Config
+	logger *slog.Logger
+	ctx    context.Context // B5: server-scoped context for cancellation on shutdown
+}
+
+func NewLoopHandler(ctx context.Context, st *store.Store, mgr *ralph.Manager, bus *events.EventBus, cfg *config.Config, logger *slog.Logger) *LoopHandler {
+	return &LoopHandler{store: st, mgr: mgr, bus: bus, config: cfg, logger: logger, ctx: ctx}
+}
+
+type createRequest struct {
+	GitURL    string `json:"git_url"`
+	AutoStart bool   `json:"auto_start"`
+}
+
+func (h *LoopHandler) List(c *fiber.Ctx) error {
+	loops := h.store.List()
+	for _, l := range loops {
+		ralph.EnrichLoop(l)
+		if h.mgr.IsRunning(l.ID) {
+			l.Status = store.StatusRunning
+			if r := h.mgr.GetRunner(l.ID); r != nil {
+				l.PID = r.PID()
+			}
+		}
+	}
+	return c.JSON(loops)
+}
+
+func (h *LoopHandler) Get(c *fiber.Ctx) error {
+	id := c.Params("id")
+	loop, ok := h.store.Get(id)
+	if !ok {
+		return c.Status(404).JSON(fiber.Map{"error": "loop not found"})
+	}
+	ralph.EnrichLoop(loop)
+	if h.mgr.IsRunning(id) {
+		loop.Status = store.StatusRunning
+		if r := h.mgr.GetRunner(id); r != nil {
+			loop.PID = r.PID()
+		}
+	}
+	return c.JSON(loop)
+}
+
+func (h *LoopHandler) Create(c *fiber.Ctx) error {
+	var req createRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "invalid request body"})
+	}
+	if err := gitpkg.ValidateURL(req.GitURL); err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	id := uuid.New().String()[:12] // I7: 12 chars (48 bits) instead of 8
+	repoName := gitpkg.RepoName(req.GitURL)
+	localPath := filepath.Join(h.config.DataDir, "repos", repoName+"-"+id)
+
+	loop := &store.Loop{
+		ID:        id,
+		GitURL:    req.GitURL,
+		RepoName:  repoName,
+		LocalPath: localPath,
+		Status:    store.StatusCloning,
+		CreatedAt: time.Now(),
+	}
+	if err := h.store.Save(loop); err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "failed to save loop"})
+	}
+
+	h.bus.Publish(events.Event{Type: "loop_created", LoopID: id})
+
+	// Clone in background
+	go h.cloneAndStart(loop, req.AutoStart)
+
+	return c.Status(201).JSON(loop)
+}
+
+func (h *LoopHandler) cloneAndStart(loop *store.Loop, autoStart bool) {
+	// B5: Use the server-scoped context so shutdown cancels in-progress clones.
+	ctx, cancel := context.WithTimeout(h.ctx, h.config.CloneTimeout)
+	defer cancel()
+
+	h.logger.Info("cloning repo", "loop_id", loop.ID, "url", loop.GitURL)
+
+	if err := gitpkg.Clone(ctx, loop.GitURL, loop.LocalPath); err != nil {
+		h.logger.Error("clone failed", "loop_id", loop.ID, "error", err)
+		loop.Status = store.StatusError
+		if err := h.store.Save(loop); err != nil {
+			h.logger.Error("failed to save loop state", "loop_id", loop.ID, "error", err)
+		}
+		h.bus.Publish(events.Event{Type: "clone_failed", LoopID: loop.ID, Data: err.Error()})
+		return
+	}
+
+	if !ralph.IsRepoEnabled(loop.LocalPath) {
+		h.logger.Warn("repo not ralph-enabled", "loop_id", loop.ID)
+		loop.Status = store.StatusError
+		if err := h.store.Save(loop); err != nil {
+			h.logger.Error("failed to save loop state", "loop_id", loop.ID, "error", err)
+		}
+		h.bus.Publish(events.Event{Type: "clone_failed", LoopID: loop.ID, Data: "repo has no .ralph/ or .ralphrc — not ralph-enabled"})
+		return
+	}
+
+	loop.Status = store.StatusStopped
+	if err := h.store.Save(loop); err != nil {
+		h.logger.Error("failed to save loop state", "loop_id", loop.ID, "error", err)
+	}
+	h.bus.Publish(events.Event{Type: "clone_complete", LoopID: loop.ID})
+
+	if autoStart {
+		h.startLoop(loop)
+	}
+}
+
+func (h *LoopHandler) Start(c *fiber.Ctx) error {
+	id := c.Params("id")
+	loop, ok := h.store.Get(id)
+	if !ok {
+		return c.Status(404).JSON(fiber.Map{"error": "loop not found"})
+	}
+	if h.mgr.IsRunning(id) {
+		return c.Status(409).JSON(fiber.Map{"error": "already running"})
+	}
+	if loop.Status == store.StatusCloning {
+		return c.Status(409).JSON(fiber.Map{"error": "still cloning"})
+	}
+
+	h.startLoop(loop)
+	return c.JSON(fiber.Map{"status": "started"})
+}
+
+func (h *LoopHandler) startLoop(loop *store.Loop) {
+	runner, err := h.mgr.Start(context.Background(), loop.ID, loop.LocalPath)
+	if err != nil {
+		h.logger.Error("failed to start ralph", "loop_id", loop.ID, "error", err)
+		loop.Status = store.StatusFailed
+		if err := h.store.Save(loop); err != nil {
+			h.logger.Error("failed to save loop state", "loop_id", loop.ID, "error", err)
+		}
+		return
+	}
+
+	now := time.Now()
+	loop.Status = store.StatusRunning
+	loop.StartedAt = &now
+	loop.PID = runner.PID()
+	if err := h.store.Save(loop); err != nil {
+		h.logger.Error("failed to save loop state", "loop_id", loop.ID, "error", err)
+	}
+	h.bus.Publish(events.Event{Type: "loop_started", LoopID: loop.ID})
+
+	// Watch for exit — use Store.Update for atomic read-modify-write to avoid lost updates.
+	loopID := loop.ID
+	go func() {
+		<-runner.Done()
+		err := h.store.Update(loopID, func(l *store.Loop) {
+			now := time.Now()
+			l.StoppedAt = &now
+			l.PID = 0
+			if runner.ExitErr() != nil {
+				l.Status = store.StatusFailed
+			} else {
+				l.Status = store.StatusComplete
+			}
+		})
+		if err != nil {
+			// Loop was deleted concurrently — that's expected, not an error.
+			return
+		}
+		h.bus.Publish(events.Event{Type: "loop_stopped", LoopID: loopID})
+	}()
+}
+
+func (h *LoopHandler) Stop(c *fiber.Ctx) error {
+	id := c.Params("id")
+	if _, ok := h.store.Get(id); !ok {
+		return c.Status(404).JSON(fiber.Map{"error": "loop not found"})
+	}
+	if !h.mgr.IsRunning(id) {
+		return c.Status(409).JSON(fiber.Map{"error": "not running"})
+	}
+	if err := h.mgr.Stop(id); err != nil {
+		h.logger.Error("failed to stop loop", "loop_id", id, "error", err)
+		return c.Status(500).JSON(fiber.Map{"error": "failed to stop loop"})
+	}
+	return c.JSON(fiber.Map{"status": "stopped"})
+}
+
+func (h *LoopHandler) Delete(c *fiber.Ctx) error {
+	id := c.Params("id")
+	loop, ok := h.store.Get(id)
+	if !ok {
+		return c.Status(404).JSON(fiber.Map{"error": "loop not found"})
+	}
+
+	// Stop if running
+	if h.mgr.IsRunning(id) {
+		if err := h.mgr.Stop(id); err != nil {
+			h.logger.Warn("failed to stop loop during delete", "loop_id", id, "error", err)
+		}
+	}
+
+	// I2: Delete from store BEFORE removing files, so the exit-watcher
+	// sees the loop is gone and skips its save.
+	if err := h.store.Delete(id); err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	// Remove repo directory
+	if loop.LocalPath != "" {
+		if err := os.RemoveAll(loop.LocalPath); err != nil {
+			h.logger.Error("failed to remove repo directory", "loop_id", id, "path", loop.LocalPath, "error", err)
+		}
+	}
+
+	h.bus.Publish(events.Event{Type: "loop_deleted", LoopID: id})
+	return c.SendStatus(204)
+}
+
+func (h *LoopHandler) Logs(c *fiber.Ctx) error {
+	id := c.Params("id")
+	loop, ok := h.store.Get(id)
+	if !ok {
+		return c.Status(404).JSON(fiber.Map{"error": "loop not found"})
+	}
+	n, _ := strconv.Atoi(c.Query("lines", "100"))
+	if n <= 0 || n > 1000 {
+		n = 100
+	}
+	content, err := ralph.ReadLog(loop.LocalPath, n)
+	if err != nil {
+		// B3: Distinguish "no log file yet" (404) from actual I/O errors (500).
+		if os.IsNotExist(err) {
+			return c.Status(404).JSON(fiber.Map{"error": "no logs available"})
+		}
+		return c.Status(500).JSON(fiber.Map{"error": "failed to read logs"})
+	}
+	return c.JSON(fiber.Map{"content": content})
+}

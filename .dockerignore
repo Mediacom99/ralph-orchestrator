@@ -1,0 +1,8 @@
+.git
+web/node_modules
+web/dist
+data/
+*.md
+.env
+.claude/
+orchestrator
