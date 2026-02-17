@@ -10,6 +10,7 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/recover"
 
 	"github.com/edoardo/ralph-orchestrator/internal/api/handlers"
+	"github.com/edoardo/ralph-orchestrator/internal/api/middleware"
 	"github.com/edoardo/ralph-orchestrator/internal/config"
 	"github.com/edoardo/ralph-orchestrator/internal/events"
 	"github.com/edoardo/ralph-orchestrator/internal/ralph"
@@ -40,8 +41,9 @@ func NewServer(ctx context.Context, cfg *config.Config, st *store.Store, mgr *ra
 	app.Use(cors.New(cors.Config{
 		AllowOrigins: cfg.AllowedOrigins,
 		AllowMethods: "GET,POST,DELETE,OPTIONS",
-		AllowHeaders: "Content-Type",
+		AllowHeaders: "Content-Type, Authorization",
 	}))
+	app.Use(middleware.BearerAuth(cfg.APIKey))
 
 	s := &Server{app: app, config: cfg, logger: logger}
 

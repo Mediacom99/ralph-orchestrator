@@ -16,6 +16,7 @@ type Config struct {
 	AllowedOrigins  string
 	CloneTimeout    time.Duration
 	ShutdownTimeout time.Duration
+	APIKey          string
 }
 
 func Load() *Config {
@@ -27,6 +28,7 @@ func Load() *Config {
 		AllowedOrigins:  envOr("ALLOWED_ORIGINS", "http://localhost:5173, http://localhost:8080"),
 		CloneTimeout:    durationOr("CLONE_TIMEOUT", 5*time.Minute),
 		ShutdownTimeout: durationOr("SHUTDOWN_TIMEOUT", 30*time.Second),
+		APIKey:          os.Getenv("API_KEY"),
 	}
 }
 
