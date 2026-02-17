@@ -1,12 +1,30 @@
+import { useEffect, useState } from "react";
 import { useLoops } from "./hooks/useLoops";
 import LoopList from "./components/LoopList";
 import NewLoopForm from "./components/NewLoopForm";
+import AuthPrompt from "./components/AuthPrompt";
 
 export default function App() {
   const { loops, loading, error, refresh } = useLoops();
+  const [needsAuth, setNeedsAuth] = useState(false);
+
+  useEffect(() => {
+    const handler = () => setNeedsAuth(true);
+    window.addEventListener("ralph:auth-required", handler);
+    return () => window.removeEventListener("ralph:auth-required", handler);
+  }, []);
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-8">
+      {needsAuth && (
+        <AuthPrompt
+          onAuthenticated={() => {
+            setNeedsAuth(false);
+            refresh();
+          }}
+        />
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <h1 className="text-2xl font-bold text-white">Ralph Orchestrator</h1>

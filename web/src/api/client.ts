@@ -2,20 +2,39 @@ import type { Loop } from "./types";
 
 const BASE = "/api";
 const REQUEST_TIMEOUT_MS = 30_000;
+const TOKEN_KEY = "ralph_api_token";
+
+export function getToken(): string {
+  return localStorage.getItem(TOKEN_KEY) ?? "";
+}
+
+export function setToken(token: string): void {
+  localStorage.setItem(TOKEN_KEY, token);
+}
+
+export function clearToken(): void {
+  localStorage.removeItem(TOKEN_KEY);
+}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
-    // B7: Only set Content-Type when the request has a body.
+    const token = getToken();
     const res = await fetch(BASE + path, {
       ...init,
       signal: init?.signal ?? controller.signal,
       headers: {
         ...(init?.body != null ? { "Content-Type": "application/json" } : {}),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...Object.fromEntries(new Headers(init?.headers)),
       },
     });
+    if (res.status === 401) {
+      clearToken();
+      window.dispatchEvent(new CustomEvent("ralph:auth-required"));
+      throw new Error("Unauthorized");
+    }
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       throw new Error(body.error || `HTTP ${res.status}`);
