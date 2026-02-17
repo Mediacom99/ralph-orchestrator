@@ -77,7 +77,7 @@ export default function NewLoopForm({ onCreated }: NewLoopFormProps) {
         </button>
         <button
           type="button"
-          onClick={() => setOpen(false)}
+          onClick={() => { setUrl(""); setAutoStart(true); setError(""); setOpen(false); }}
           className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded cursor-pointer"
         >
           Cancel

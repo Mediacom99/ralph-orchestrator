@@ -22,17 +22,16 @@ export default function LiveLog({ loopId, onClose }: LiveLogProps) {
   }, [onClose]);
 
   useEffect(() => {
+    let active = true;
     const ac = new AbortController();
     const doFetch = () => {
       api.getLogs(loopId, 200, ac.signal)
-        .then((data) => setContent(data.content || "(empty)"))
-        .catch(() => {
-          if (!ac.signal.aborted) setContent("(no logs available)");
-        });
+        .then((data) => { if (active) setContent(data.content || "(empty)"); })
+        .catch(() => { if (active) setContent("(no logs available)"); });
     };
     doFetch();
     const t = setInterval(doFetch, 3000);
-    return () => { ac.abort(); clearInterval(t); };
+    return () => { active = false; ac.abort(); clearInterval(t); };
   }, [loopId]);
 
   useEffect(() => {
