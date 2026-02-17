@@ -5,7 +5,7 @@ import NewLoopForm from "./components/NewLoopForm";
 import AuthPrompt from "./components/AuthPrompt";
 
 export default function App() {
-  const { loops, loading, error, refresh } = useLoops();
+  const { loops, loading, error, refresh, wsConnected } = useLoops();
   const [needsAuth, setNeedsAuth] = useState(false);
 
   useEffect(() => {
@@ -27,7 +27,13 @@ export default function App() {
 
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
-        <h1 className="text-2xl font-bold text-white">Ralph Orchestrator</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-bold text-white">Ralph Orchestrator</h1>
+          <span
+            className={`inline-block w-2 h-2 rounded-full ${wsConnected ? "bg-emerald-500" : "bg-gray-500"}`}
+            title={wsConnected ? "WebSocket connected" : "WebSocket disconnected"}
+          />
+        </div>
         <NewLoopForm onCreated={refresh} />
       </div>
 
