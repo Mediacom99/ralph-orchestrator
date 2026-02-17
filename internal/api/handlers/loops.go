@@ -164,6 +164,11 @@ func (h *LoopHandler) Start(c *fiber.Ctx) error {
 func (h *LoopHandler) startLoop(loop *store.Loop) {
 	runner, err := h.mgr.Start(context.Background(), loop.ID, loop.LocalPath)
 	if err != nil {
+		// If the manager says "already running" and it IS running, treat as benign race.
+		if h.mgr.IsRunning(loop.ID) {
+			h.logger.Info("concurrent start race resolved, loop already running", "loop_id", loop.ID)
+			return
+		}
 		h.logger.Error("failed to start ralph", "loop_id", loop.ID, "error", err)
 		_ = h.store.Update(loop.ID, func(l *store.Loop) { l.Status = store.StatusFailed })
 		return
@@ -253,19 +258,29 @@ func (h *LoopHandler) Delete(c *fiber.Ctx) error {
 
 	// Remove repo directory — verify it's under DataDir to prevent accidental
 	// deletion of unrelated paths if the store data is corrupted.
-	if loop.LocalPath != "" {
-		absPath, err := filepath.Abs(loop.LocalPath)
-		if err == nil && strings.HasPrefix(absPath, filepath.Clean(h.config.DataDir)+string(filepath.Separator)) {
-			if err := os.RemoveAll(absPath); err != nil {
-				h.logger.Error("failed to remove repo directory", "loop_id", id, "path", absPath, "error", err)
-			}
-		} else {
-			h.logger.Error("refusing to remove path outside data dir", "loop_id", id, "path", loop.LocalPath, "data_dir", h.config.DataDir)
+	if h.validateLocalPath(loop.LocalPath) {
+		absPath, _ := filepath.Abs(loop.LocalPath)
+		if err := os.RemoveAll(absPath); err != nil {
+			h.logger.Error("failed to remove repo directory", "loop_id", id, "path", absPath, "error", err)
 		}
+	} else if loop.LocalPath != "" {
+		h.logger.Error("refusing to remove path outside data dir", "loop_id", id, "path", loop.LocalPath, "data_dir", h.config.DataDir)
 	}
 
 	h.bus.Publish(events.Event{Type: "loop_deleted", LoopID: id})
 	return c.SendStatus(204)
+}
+
+// validateLocalPath ensures a loop's LocalPath is under the configured DataDir.
+func (h *LoopHandler) validateLocalPath(localPath string) bool {
+	if localPath == "" {
+		return false
+	}
+	absPath, err := filepath.Abs(localPath)
+	if err != nil {
+		return false
+	}
+	return strings.HasPrefix(absPath, filepath.Clean(h.config.DataDir)+string(filepath.Separator))
 }
 
 func (h *LoopHandler) Logs(c *fiber.Ctx) error {
@@ -273,6 +288,10 @@ func (h *LoopHandler) Logs(c *fiber.Ctx) error {
 	loop, ok := h.store.Get(id)
 	if !ok {
 		return c.Status(404).JSON(fiber.Map{"error": "loop not found"})
+	}
+	if !h.validateLocalPath(loop.LocalPath) {
+		h.logger.Error("refusing to read logs from path outside data dir", "loop_id", id, "path", loop.LocalPath)
+		return c.Status(403).JSON(fiber.Map{"error": "invalid path"})
 	}
 	n, _ := strconv.Atoi(c.Query("lines", "100"))
 	if n <= 0 || n > 1000 {

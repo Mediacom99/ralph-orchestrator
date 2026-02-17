@@ -41,7 +41,7 @@ func (m *Manager) Stop(loopID string) error {
 	r, ok := m.runners[loopID]
 	m.mu.RUnlock()
 	if !ok {
-		return fmt.Errorf("loop %s not found", loopID)
+		return nil // idempotent: missing runner is not an error
 	}
 	return r.Stop()
 }

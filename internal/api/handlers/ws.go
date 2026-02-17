@@ -42,8 +42,10 @@ func SetupWebSocket(app *fiber.App, bus *events.EventBus, logger *slog.Logger) {
 			return nil
 		})
 
-		// Read pump (detect close)
+		// Read pump — closes done channel when the client disconnects.
+		done := make(chan struct{})
 		go func() {
+			defer close(done)
 			for {
 				if _, _, err := c.ReadMessage(); err != nil {
 					break
@@ -71,6 +73,8 @@ func SetupWebSocket(app *fiber.App, bus *events.EventBus, logger *slog.Logger) {
 				if err := c.WriteMessage(websocket.PingMessage, nil); err != nil {
 					return
 				}
+			case <-done:
+				return
 			}
 		}
 	}))

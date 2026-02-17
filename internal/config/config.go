@@ -1,8 +1,10 @@
 package config
 
 import (
+	"fmt"
 	"log/slog"
 	"os"
+	"strconv"
 	"time"
 )
 
@@ -26,6 +28,23 @@ func Load() *Config {
 		CloneTimeout:    durationOr("CLONE_TIMEOUT", 5*time.Minute),
 		ShutdownTimeout: durationOr("SHUTDOWN_TIMEOUT", 30*time.Second),
 	}
+}
+
+func (c *Config) Validate() error {
+	if c.DataDir == "" {
+		return fmt.Errorf("DATA_DIR must not be empty")
+	}
+	port, err := strconv.Atoi(c.Port)
+	if err != nil || port < 1 || port > 65535 {
+		return fmt.Errorf("PORT must be between 1 and 65535, got %q", c.Port)
+	}
+	if c.CloneTimeout <= 0 {
+		return fmt.Errorf("CLONE_TIMEOUT must be positive")
+	}
+	if c.ShutdownTimeout <= 0 {
+		return fmt.Errorf("SHUTDOWN_TIMEOUT must be positive")
+	}
+	return nil
 }
 
 func envOr(key, fallback string) string {

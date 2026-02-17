@@ -160,8 +160,15 @@ func EnrichLoop(loop *store.Loop) {
 	if cached, ok := enrichCache.Load(key); ok {
 		entry := cached.(*enrichEntry)
 		if time.Since(entry.fetchedAt) < enrichCacheTTL {
-			loop.RalphStatus = entry.ralphStatus
-			loop.Progress = entry.progress
+			// Clone cached structs to avoid pointer aliasing across callers.
+			if entry.ralphStatus != nil {
+				cp := *entry.ralphStatus
+				loop.RalphStatus = &cp
+			}
+			if entry.progress != nil {
+				cp := *entry.progress
+				loop.Progress = &cp
+			}
 			return
 		}
 	}
@@ -182,9 +189,20 @@ func EnrichLoop(loop *store.Loop) {
 		loop.Progress.Percentage = float64(done) / float64(total) * 100
 	}
 
+	// Clone before storing into cache to prevent aliasing.
+	var cachedStatus *store.RalphStatusData
+	var cachedProgress *store.ProgressData
+	if loop.RalphStatus != nil {
+		cp := *loop.RalphStatus
+		cachedStatus = &cp
+	}
+	if loop.Progress != nil {
+		cp := *loop.Progress
+		cachedProgress = &cp
+	}
 	enrichCache.Store(key, &enrichEntry{
-		ralphStatus: loop.RalphStatus,
-		progress:    loop.Progress,
+		ralphStatus: cachedStatus,
+		progress:    cachedProgress,
 		fetchedAt:   time.Now(),
 	})
 }
