@@ -93,6 +93,8 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v4
+      - id: lower
+        run: echo "repo=${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -102,4 +104,4 @@ jobs:
         with:
           context: .
           push: true
-          tags: ghcr.io/${{ github.repository }}:${{ github.sha }}
+          tags: ghcr.io/${{ steps.lower.outputs.repo }}:${{ github.sha }}
