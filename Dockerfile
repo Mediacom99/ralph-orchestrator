@@ -16,29 +16,32 @@ COPY . .
 COPY --from=frontend /web/dist web/dist/
 RUN CGO_ENABLED=0 go build -ldflags="-w -s" -o orchestrator ./cmd/orchestrator
 
-## Stage 3: Install ralph-claude-code (separate stage so runtime stays slim)
-FROM node:20-alpine AS ralph-installer
-RUN apk add --no-cache git bash
+## Stage 3: Runtime — node:20-alpine provides Node.js required by claude-code
+FROM node:20-alpine
+RUN apk add --no-cache git bash jq coreutils
+
+# Install claude-code globally (needs Node.js)
 RUN npm install -g @anthropic-ai/claude-code
+
+# Create app user before installing ralph (install.sh writes to $HOME)
+RUN addgroup -g 1000 app && adduser -D -u 1000 -G app app
+RUN mkdir -p /data && chown app:app /data
+
+# Install ralph-claude-code as app user so paths go to /home/app/
+USER app
 RUN git clone --depth 1 https://github.com/frankbria/ralph-claude-code.git /tmp/ralph \
     && cd /tmp/ralph && chmod +x install.sh && ./install.sh \
     && rm -rf /tmp/ralph
+ENV PATH="/home/app/.local/bin:$PATH"
 
-## Stage 4: Runtime — M6: only git and bash needed at runtime.
-FROM alpine:3.21
-RUN apk add --no-cache git bash
-RUN mkdir -p /data
 WORKDIR /app
+USER root
 COPY --from=builder /app/orchestrator .
-# Copy ralph and claude-code binaries from installer stage
-COPY --from=ralph-installer /usr/local/bin/ralph /usr/local/bin/ralph
-COPY --from=ralph-installer /usr/local/bin/claude /usr/local/bin/claude
-RUN addgroup -g 1000 app && adduser -D -u 1000 -G app app
-RUN chown -R app:app /data /app
+RUN chown app:app /app/orchestrator
 USER app
+
 EXPOSE 8080
 ENV DATA_DIR=/data
-# M7: Add HEALTHCHECK so container orchestrators can detect unresponsive app.
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD wget -qO- http://localhost:8080/api/health || exit 1
 ENTRYPOINT ["./orchestrator"]
