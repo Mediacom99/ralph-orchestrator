@@ -20,16 +20,17 @@ import (
 )
 
 type LoopHandler struct {
-	store  *store.Store
-	mgr    *ralph.Manager
-	bus    *events.EventBus
-	config *config.Config
-	logger *slog.Logger
-	ctx    context.Context // B5: server-scoped context for cancellation on shutdown
+	store    *store.Store
+	settings *store.SettingsStore
+	mgr      *ralph.Manager
+	bus      *events.EventBus
+	config   *config.Config
+	logger   *slog.Logger
+	ctx      context.Context // B5: server-scoped context for cancellation on shutdown
 }
 
-func NewLoopHandler(ctx context.Context, st *store.Store, mgr *ralph.Manager, bus *events.EventBus, cfg *config.Config, logger *slog.Logger) *LoopHandler {
-	return &LoopHandler{store: st, mgr: mgr, bus: bus, config: cfg, logger: logger, ctx: ctx}
+func NewLoopHandler(ctx context.Context, st *store.Store, settings *store.SettingsStore, mgr *ralph.Manager, bus *events.EventBus, cfg *config.Config, logger *slog.Logger) *LoopHandler {
+	return &LoopHandler{store: st, settings: settings, mgr: mgr, bus: bus, config: cfg, logger: logger, ctx: ctx}
 }
 
 type createRequest struct {
@@ -106,9 +107,10 @@ func (h *LoopHandler) cloneAndStart(loop *store.Loop, autoStart bool) {
 	defer cancel()
 
 	loopID := loop.ID
-	h.logger.Info("cloning repo", "loop_id", loopID, "url", loop.GitURL)
+	githubToken := h.settings.GetGitHubToken()
+	h.logger.Info("cloning repo", "loop_id", loopID, "url", loop.GitURL, "has_token", githubToken != "")
 
-	if err := gitpkg.Clone(ctx, loop.GitURL, loop.LocalPath); err != nil {
+	if err := gitpkg.Clone(ctx, loop.GitURL, loop.LocalPath, githubToken); err != nil {
 		h.logger.Error("clone failed", "loop_id", loopID, "error", err)
 		if err := h.store.Update(loopID, func(l *store.Loop) { l.Status = store.StatusError }); err != nil {
 			h.logger.Warn("loop gone during clone error update", "loop_id", loopID)

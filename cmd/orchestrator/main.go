@@ -51,6 +51,24 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Initialize settings store
+	settingsPath := filepath.Join(cfg.DataDir, "settings.json")
+	settings, err := store.NewSettingsStore(settingsPath)
+	if err != nil {
+		logger.Error("failed to initialize settings store", "error", err)
+		os.Exit(1)
+	}
+	// Seed GitHub token from env if not already persisted.
+	if settings.GetGitHubToken() == "" {
+		if envToken := os.Getenv("GITHUB_TOKEN"); envToken != "" {
+			if err := settings.SetGitHubToken(envToken); err != nil {
+				logger.Error("failed to seed GitHub token from env", "error", err)
+			} else {
+				logger.Info("seeded GitHub token from GITHUB_TOKEN env var")
+			}
+		}
+	}
+
 	// I5: Reconcile stale "running" loops on startup — log save errors at error level.
 	for _, loop := range st.List() {
 		if loop.Status == store.StatusRunning || loop.Status == store.StatusCloning {
@@ -69,7 +87,7 @@ func main() {
 	srvCtx, srvCancel := context.WithCancel(context.Background())
 	defer srvCancel()
 
-	srv := api.NewServer(srvCtx, cfg, st, mgr, bus, logger)
+	srv := api.NewServer(srvCtx, cfg, st, settings, mgr, bus, logger)
 
 	// Graceful shutdown
 	quit := make(chan os.Signal, 1)

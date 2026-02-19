@@ -24,6 +24,10 @@ func setupTestApp(t *testing.T) (*fiber.App, *store.Store) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	settings, err := store.NewSettingsStore(filepath.Join(dir, "settings.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	bus := events.NewEventBus(logger)
 	mgr := ralph.NewManager(logger)
@@ -31,7 +35,7 @@ func setupTestApp(t *testing.T) (*fiber.App, *store.Store) {
 	ctx := t.Context()
 
 	app := fiber.New()
-	h := NewLoopHandler(ctx, st, mgr, bus, cfg, logger)
+	h := NewLoopHandler(ctx, st, settings, mgr, bus, cfg, logger)
 	api := app.Group("/api")
 	api.Get("/health", Health)
 	api.Get("/loops", h.List)

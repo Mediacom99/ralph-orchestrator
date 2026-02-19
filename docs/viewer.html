@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ralph Orchestrator</title>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/catppuccin-mocha.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/go.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/typescript.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/bash.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/json.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/dockerfile.min.js"></script>
+<style>
+  :root {
+    --crust: #11111b; --mantle: #181825; --base: #1e1e2e;
+    --surface0: #313244; --surface1: #45475a; --surface2: #585b70;
+    --overlay0: #6c7086; --overlay1: #7f849c;
+    --subtext0: #a6adc8; --subtext1: #bac2de;
+    --text: #cdd6f4;
+    --lavender: #b4befe; --blue: #89b4fa; --sapphire: #74c7ec;
+    --sky: #89dceb; --teal: #94e2d5; --green: #a6e3a1;
+    --yellow: #f9e2af; --peach: #fab387; --maroon: #eba0ac;
+    --red: #f38ba8; --mauve: #cba6f7; --pink: #f5c2e7;
+    --flamingo: #f2cdcd; --rosewater: #f5e0dc;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--base); color: var(--text);
+    display: flex; height: 100vh; overflow: hidden;
+  }
+
+  /* Sidebar */
+  #sidebar {
+    width: 280px; min-width: 280px; background: var(--mantle);
+    border-right: 1px solid var(--surface0); overflow-y: auto;
+    display: flex; flex-direction: column;
+  }
+  #sidebar h1 {
+    font-size: 1.2rem; padding: 16px 20px; color: var(--mauve);
+    border-bottom: 1px solid var(--surface0); position: sticky;
+    top: 0; background: var(--mantle); z-index: 1;
+  }
+  .nav-section { border-bottom: 1px solid var(--surface0); }
+  .nav-section-header {
+    padding: 10px 20px; font-size: 0.75rem; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.05em;
+    color: var(--overlay1); cursor: pointer; user-select: none;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .nav-section-header:hover { color: var(--subtext1); }
+  .nav-section-header::after {
+    content: ''; display: inline-block; width: 6px; height: 6px;
+    border-right: 2px solid currentColor; border-bottom: 2px solid currentColor;
+    transform: rotate(45deg); transition: transform 0.15s;
+  }
+  .nav-section.collapsed .nav-section-header::after { transform: rotate(-45deg); }
+  .nav-section.collapsed .nav-items { display: none; }
+  .nav-items { padding: 0 0 8px; }
+  .nav-item {
+    display: block; padding: 5px 20px 5px 28px; font-size: 0.85rem;
+    color: var(--subtext0); cursor: pointer; text-decoration: none;
+    border-left: 3px solid transparent; transition: all 0.1s;
+  }
+  .nav-item:hover { color: var(--text); background: var(--surface0); }
+  .nav-item.active {
+    color: var(--lavender); background: var(--surface0);
+    border-left-color: var(--lavender);
+  }
+
+  /* Main content */
+  #main {
+    flex: 1; display: flex; flex-direction: column; overflow: hidden;
+  }
+  #toolbar {
+    padding: 8px 20px; background: var(--mantle);
+    border-bottom: 1px solid var(--surface0);
+    font-size: 0.8rem; color: var(--overlay1);
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  #toolbar kbd {
+    background: var(--surface0); padding: 2px 6px; border-radius: 3px;
+    font-size: 0.75rem; color: var(--subtext0); margin: 0 2px;
+  }
+  #content-wrapper {
+    flex: 1; display: flex; overflow: hidden;
+  }
+  #content {
+    flex: 1; overflow-y: auto; padding: 32px 48px; max-width: 900px;
+  }
+  #toc {
+    width: 220px; min-width: 220px; overflow-y: auto;
+    padding: 20px 16px; border-left: 1px solid var(--surface0);
+    font-size: 0.8rem; position: sticky; top: 0;
+  }
+  #toc h3 {
+    font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em;
+    color: var(--overlay1); margin-bottom: 10px;
+  }
+  .toc-item {
+    display: block; padding: 3px 0; color: var(--subtext0);
+    text-decoration: none; cursor: pointer; transition: color 0.1s;
+  }
+  .toc-item:hover { color: var(--text); }
+  .toc-item.toc-h3 { padding-left: 12px; font-size: 0.75rem; }
+  .toc-item.toc-h4 { padding-left: 24px; font-size: 0.7rem; }
+
+  /* Markdown styles */
+  #content h1 { font-size: 2rem; color: var(--mauve); margin: 0 0 24px; border-bottom: 1px solid var(--surface0); padding-bottom: 12px; }
+  #content h2 { font-size: 1.5rem; color: var(--blue); margin: 32px 0 16px; }
+  #content h3 { font-size: 1.2rem; color: var(--sapphire); margin: 24px 0 12px; }
+  #content h4 { font-size: 1rem; color: var(--teal); margin: 20px 0 8px; }
+  #content h5 { font-size: 0.9rem; color: var(--green); margin: 16px 0 8px; }
+  #content p { margin: 0 0 12px; line-height: 1.7; }
+  #content a { color: var(--blue); }
+  #content a:hover { color: var(--sapphire); }
+  #content ul, #content ol { margin: 0 0 12px 24px; line-height: 1.7; }
+  #content li { margin: 2px 0; }
+  #content code {
+    background: var(--surface0); padding: 2px 6px; border-radius: 4px;
+    font-size: 0.9em; color: var(--peach);
+  }
+  #content pre {
+    background: var(--mantle) !important; border: 1px solid var(--surface0);
+    border-radius: 6px; padding: 16px; margin: 0 0 16px;
+    overflow-x: auto;
+  }
+  #content pre code {
+    background: none; padding: 0; color: var(--text); font-size: 0.85rem;
+  }
+  #content blockquote {
+    border-left: 3px solid var(--mauve); padding: 8px 16px;
+    margin: 0 0 12px; background: var(--surface0); border-radius: 0 4px 4px 0;
+    color: var(--subtext1);
+  }
+  #content table {
+    border-collapse: collapse; margin: 0 0 16px; width: 100%;
+  }
+  #content th, #content td {
+    border: 1px solid var(--surface1); padding: 8px 12px; text-align: left;
+  }
+  #content th { background: var(--surface0); color: var(--lavender); font-weight: 600; }
+  #content tr:hover { background: var(--surface0); }
+  #content hr { border: none; border-top: 1px solid var(--surface0); margin: 24px 0; }
+  #content img { max-width: 100%; border-radius: 6px; }
+  #content strong { color: var(--rosewater); }
+
+  /* Loading state */
+  .loading { color: var(--overlay0); font-style: italic; padding: 48px; }
+
+  /* Scroll position indicator */
+  #content h1[id], #content h2[id], #content h3[id], #content h4[id] {
+    scroll-margin-top: 16px;
+  }
+</style>
+</head>
+<body>
+
+<div id="sidebar">
+  <h1>Ralph Orchestrator</h1>
+  <div id="nav"></div>
+</div>
+
+<div id="main">
+  <div id="toolbar">
+    <span id="breadcrumb">Select a document</span>
+    <span><kbd>J</kbd>/<kbd>K</kbd> navigate <kbd>Esc</kbd> sidebar</span>
+  </div>
+  <div id="content-wrapper">
+    <div id="content"><p class="loading">Select a document from the sidebar.</p></div>
+    <div id="toc"></div>
+  </div>
+</div>
+
+<script>
+const DOCS = {
+  "Documentation": [
+    { name: "Project Overview", path: "./01-overview.md" },
+    { name: "Architecture & Design", path: "./02-architecture.md" },
+    { name: "Backend Deep Dive", path: "./03-backend.md" },
+    { name: "Frontend Deep Dive", path: "./04-frontend.md" },
+    { name: "Responsive & Mobile Design", path: "./05-responsive-design.md" },
+    { name: "Features & Functionality", path: "./06-features.md" },
+    { name: "Security Analysis", path: "./07-security.md" },
+    { name: "Testing & CI/CD", path: "./08-testing.md" },
+    { name: "Deployment & Operations", path: "./09-deployment.md" },
+    { name: "Extendability & Future Work", path: "./10-extendability.md" },
+  ],
+};
+
+// Build flat list for keyboard nav
+const allDocs = Object.values(DOCS).flat();
+let currentIndex = -1;
+
+// Configure marked
+marked.setOptions({
+  highlight: (code, lang) => {
+    if (lang && hljs.getLanguage(lang)) {
+      return hljs.highlight(code, { language: lang }).value;
+    }
+    return hljs.highlightAuto(code).value;
+  },
+  gfm: true,
+  breaks: false,
+});
+
+// Build sidebar navigation
+function buildNav() {
+  const nav = document.getElementById('nav');
+  let html = '';
+  for (const [section, docs] of Object.entries(DOCS)) {
+    html += `<div class="nav-section">`;
+    html += `<div class="nav-section-header">${section}</div>`;
+    html += `<div class="nav-items">`;
+    for (const doc of docs) {
+      const idx = allDocs.indexOf(doc);
+      html += `<a class="nav-item" data-index="${idx}">${doc.name}</a>`;
+    }
+    html += `</div></div>`;
+  }
+  nav.innerHTML = html;
+
+  // Section collapse toggle
+  nav.querySelectorAll('.nav-section-header').forEach(header => {
+    header.addEventListener('click', () => {
+      header.parentElement.classList.toggle('collapsed');
+    });
+  });
+
+  // Doc click
+  nav.querySelectorAll('.nav-item').forEach(item => {
+    item.addEventListener('click', () => loadDoc(parseInt(item.dataset.index)));
+  });
+}
+
+// Generate heading IDs and TOC
+function buildToc(html) {
+  const container = document.createElement('div');
+  container.innerHTML = html;
+  const headings = container.querySelectorAll('h1, h2, h3, h4');
+  const tocItems = [];
+
+  headings.forEach((h, i) => {
+    const id = 'heading-' + i;
+    h.id = id;
+    const level = h.tagName.toLowerCase();
+    if (level === 'h1') return; // skip doc title from TOC
+    tocItems.push({ id, text: h.textContent, level });
+  });
+
+  return { html: container.innerHTML, tocItems };
+}
+
+// Render TOC sidebar
+function renderToc(items) {
+  const toc = document.getElementById('toc');
+  if (items.length === 0) {
+    toc.innerHTML = '';
+    return;
+  }
+  let html = '<h3>On this page</h3>';
+  for (const item of items) {
+    html += `<a class="toc-item toc-${item.level}" data-target="${item.id}">${item.text}</a>`;
+  }
+  toc.innerHTML = html;
+
+  toc.querySelectorAll('.toc-item').forEach(el => {
+    el.addEventListener('click', () => {
+      document.getElementById(el.dataset.target)?.scrollIntoView({ behavior: 'smooth' });
+    });
+  });
+}
+
+// Load and render a document
+async function loadDoc(index) {
+  if (index < 0 || index >= allDocs.length) return;
+  currentIndex = index;
+  const doc = allDocs[index];
+  const content = document.getElementById('content');
+  const breadcrumb = document.getElementById('breadcrumb');
+
+  // Update active nav item
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+  document.querySelector(`.nav-item[data-index="${index}"]`)?.classList.add('active');
+
+  // Scroll nav item into view
+  document.querySelector(`.nav-item[data-index="${index}"]`)?.scrollIntoView({ block: 'nearest' });
+
+  breadcrumb.textContent = doc.name;
+  content.innerHTML = '<p class="loading">Loading...</p>';
+
+  try {
+    const resp = await fetch(doc.path);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const md = await resp.text();
+    const rawHtml = marked.parse(md);
+    const { html, tocItems } = buildToc(rawHtml);
+    content.innerHTML = html;
+    renderToc(tocItems);
+    content.scrollTop = 0;
+
+    // Update URL hash
+    history.replaceState(null, '', '#' + encodeURIComponent(doc.path));
+  } catch (err) {
+    content.innerHTML = `<p style="color: var(--red)">Failed to load: ${doc.path}<br>${err.message}</p>`;
+    renderToc([]);
+  }
+}
+
+// Keyboard navigation
+document.addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+  if (e.key === 'j' || e.key === 'J') {
+    e.preventDefault();
+    loadDoc(currentIndex + 1);
+  } else if (e.key === 'k' || e.key === 'K') {
+    e.preventDefault();
+    loadDoc(Math.max(0, currentIndex - 1));
+  } else if (e.key === 'Escape') {
+    document.getElementById('sidebar').querySelector('.nav-item.active')?.focus();
+  }
+});
+
+// Init
+buildNav();
+
+// Load from hash or first doc
+const hash = decodeURIComponent(location.hash.slice(1));
+const hashIndex = allDocs.findIndex(d => d.path === hash);
+if (hashIndex >= 0) {
+  loadDoc(hashIndex);
+} else {
+  loadDoc(0);
+}
+</script>
+
+</body>
+</html>

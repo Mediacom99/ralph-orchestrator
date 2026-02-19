@@ -23,7 +23,7 @@ type Server struct {
 	logger *slog.Logger
 }
 
-func NewServer(ctx context.Context, cfg *config.Config, st *store.Store, mgr *ralph.Manager, bus *events.EventBus, logger *slog.Logger) *Server {
+func NewServer(ctx context.Context, cfg *config.Config, st *store.Store, settings *store.SettingsStore, mgr *ralph.Manager, bus *events.EventBus, logger *slog.Logger) *Server {
 	app := fiber.New(fiber.Config{
 		DisableStartupMessage: true,
 		AppName:               "ralph-orchestrator",
@@ -40,7 +40,7 @@ func NewServer(ctx context.Context, cfg *config.Config, st *store.Store, mgr *ra
 	// I6: Restrict CORS to configured origins (default: localhost).
 	app.Use(cors.New(cors.Config{
 		AllowOrigins: cfg.AllowedOrigins,
-		AllowMethods: "GET,POST,DELETE,OPTIONS",
+		AllowMethods: "GET,POST,PUT,DELETE,OPTIONS",
 		AllowHeaders: "Content-Type, Authorization",
 	}))
 	app.Use(middleware.BearerAuth(cfg.APIKey))
@@ -48,10 +48,13 @@ func NewServer(ctx context.Context, cfg *config.Config, st *store.Store, mgr *ra
 	s := &Server{app: app, config: cfg, logger: logger}
 
 	// B5: Pass server-scoped context so background goroutines can be cancelled on shutdown.
-	h := handlers.NewLoopHandler(ctx, st, mgr, bus, cfg, logger)
+	h := handlers.NewLoopHandler(ctx, st, settings, mgr, bus, cfg, logger)
+	sh := handlers.NewSettingsHandler(settings)
 
 	api := app.Group("/api")
 	api.Get("/health", handlers.Health)
+	api.Get("/settings", sh.Get)
+	api.Put("/settings", sh.Update)
 	api.Get("/loops", h.List)
 	api.Post("/loops", h.Create)
 	api.Get("/loops/:id", h.Get)

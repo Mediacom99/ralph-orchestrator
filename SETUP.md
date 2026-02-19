@@ -31,6 +31,8 @@ The Go server embeds the built React frontend at compile time. In production the
 | `PORT` | `8080` | HTTP server listen port |
 | `DATA_DIR` | `data` | Directory for loop data and cloned repos |
 | `LOG_LEVEL` | `info` | Log level: `debug`, `info`, `warn`, `error` |
+| `API_KEY` | *(empty)* | Bearer token for API auth (empty = no auth) |
+| `GITHUB_TOKEN` | *(empty)* | GitHub PAT for cloning private repos (seeds settings on first run) |
 | `ALLOWED_ORIGINS` | `http://localhost:5173, http://localhost:8080` | CORS allowed origins (comma-separated) |
 | `CLONE_TIMEOUT` | `5m` | Timeout for git clone operations |
 | `SHUTDOWN_TIMEOUT` | `30s` | Graceful shutdown timeout |
@@ -42,6 +44,8 @@ The Go server embeds the built React frontend at compile time. In production the
 | Method | Path | Description |
 |---|---|---|
 | GET | `/api/health` | Health check → `{"status":"ok"}` |
+| GET | `/api/settings` | Get settings (GitHub token masked) |
+| PUT | `/api/settings` | Update settings (GitHub PAT) |
 | GET | `/api/loops` | List all loops (enriched with live ralph status) |
 | POST | `/api/loops` | Create loop → `{"git_url":"...","auto_start":true}` |
 | GET | `/api/loops/:id` | Get single loop |

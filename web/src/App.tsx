@@ -3,10 +3,12 @@ import { useLoops } from "./hooks/useLoops";
 import LoopList from "./components/LoopList";
 import NewLoopForm from "./components/NewLoopForm";
 import AuthPrompt from "./components/AuthPrompt";
+import SettingsPanel from "./components/SettingsPanel";
 
 export default function App() {
   const { loops, loading, error, refresh, wsConnected } = useLoops();
   const [needsAuth, setNeedsAuth] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   useEffect(() => {
     const handler = () => setNeedsAuth(true);
@@ -25,6 +27,8 @@ export default function App() {
         />
       )}
 
+      {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
+
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-3">
@@ -34,7 +38,15 @@ export default function App() {
             title={wsConnected ? "WebSocket connected" : "WebSocket disconnected"}
           />
         </div>
-        <NewLoopForm onCreated={refresh} />
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setSettingsOpen(true)}
+            className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded-lg cursor-pointer"
+          >
+            Settings
+          </button>
+          <NewLoopForm onCreated={refresh} />
+        </div>
       </div>
 
       {/* Status bar */}

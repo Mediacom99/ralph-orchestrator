@@ -22,6 +22,11 @@ export interface ProgressData {
   last_output?: string;
 }
 
+export interface SettingsResponse {
+  github_token: string;
+  has_github_token: boolean;
+}
+
 export interface Loop {
   id: string;
   git_url: string;

@@ -1,4 +1,4 @@
-import type { Loop } from "./types";
+import type { Loop, SettingsResponse } from "./types";
 
 const BASE = "/api";
 const REQUEST_TIMEOUT_MS = 30_000;
@@ -73,4 +73,12 @@ export const api = {
 
   getLogs: (id: string, lines = 100, signal?: AbortSignal) =>
     request<{ content: string }>(`/loops/${id}/logs?lines=${lines}`, { signal }),
+
+  getSettings: () => request<SettingsResponse>("/settings"),
+
+  updateSettings: (data: { github_token: string }) =>
+    request<SettingsResponse>("/settings", {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
 };

@@ -12,8 +12,23 @@ import (
 	"time"
 )
 
-func Clone(ctx context.Context, gitURL, targetDir string) error {
-	cmd := exec.CommandContext(ctx, "git", "clone", gitURL, targetDir)
+// InjectToken inserts a GitHub PAT into an HTTPS git URL as userinfo.
+// SSH URLs (git@...) are returned unchanged.
+func InjectToken(rawURL, token string) string {
+	if token == "" || strings.HasPrefix(rawURL, "git@") {
+		return rawURL
+	}
+	u, err := url.Parse(rawURL)
+	if err != nil || u.Scheme != "https" {
+		return rawURL
+	}
+	u.User = url.UserPassword("x-access-token", token)
+	return u.String()
+}
+
+func Clone(ctx context.Context, gitURL, targetDir, githubToken string) error {
+	cloneURL := InjectToken(gitURL, githubToken)
+	cmd := exec.CommandContext(ctx, "git", "clone", cloneURL, targetDir)
 	// Mitigate DNS rebinding: disable HTTP redirects so an attacker cannot
 	// redirect git to an internal address after the SSRF check passes.
 	cmd.Env = append(cmd.Environ(),
@@ -23,7 +38,12 @@ func Clone(ctx context.Context, gitURL, targetDir string) error {
 	)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("git clone failed: %w\n%s", err, string(output))
+		// Sanitize token from error output.
+		out := string(output)
+		if githubToken != "" {
+			out = strings.ReplaceAll(out, githubToken, "***")
+		}
+		return fmt.Errorf("git clone failed: %w\n%s", err, out)
 	}
 	return nil
 }
