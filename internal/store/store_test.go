@@ -40,7 +40,7 @@ func TestSaveAndGet(t *testing.T) {
 
 func TestGetReturnsCopy(t *testing.T) {
 	s := newTestStore(t)
-	s.Save(&Loop{ID: "a", Status: StatusStopped, CreatedAt: time.Now()})
+	_ = s.Save(&Loop{ID: "a", Status: StatusStopped, CreatedAt: time.Now()})
 	got, _ := s.Get("a")
 	got.Status = StatusRunning
 
@@ -52,7 +52,7 @@ func TestGetReturnsCopy(t *testing.T) {
 
 func TestListReturnsCopies(t *testing.T) {
 	s := newTestStore(t)
-	s.Save(&Loop{ID: "a", Status: StatusStopped, CreatedAt: time.Now()})
+	_ = s.Save(&Loop{ID: "a", Status: StatusStopped, CreatedAt: time.Now()})
 	list := s.List()
 	if len(list) != 1 {
 		t.Fatalf("List len = %d, want 1", len(list))
@@ -66,7 +66,7 @@ func TestListReturnsCopies(t *testing.T) {
 
 func TestUpdate(t *testing.T) {
 	s := newTestStore(t)
-	s.Save(&Loop{ID: "a", Status: StatusStopped, CreatedAt: time.Now()})
+	_ = s.Save(&Loop{ID: "a", Status: StatusStopped, CreatedAt: time.Now()})
 	err := s.Update("a", func(l *Loop) { l.Status = StatusRunning })
 	if err != nil {
 		t.Fatalf("Update: %v", err)
@@ -87,7 +87,7 @@ func TestUpdateMissing(t *testing.T) {
 
 func TestDelete(t *testing.T) {
 	s := newTestStore(t)
-	s.Save(&Loop{ID: "a", CreatedAt: time.Now()})
+	_ = s.Save(&Loop{ID: "a", CreatedAt: time.Now()})
 	if err := s.Delete("a"); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
@@ -104,10 +104,10 @@ func TestConcurrentAccess(t *testing.T) {
 		go func(i int) {
 			defer wg.Done()
 			id := "loop-" + string(rune('a'+i%26))
-			s.Save(&Loop{ID: id, Status: StatusStopped, CreatedAt: time.Now()})
+			_ = s.Save(&Loop{ID: id, Status: StatusStopped, CreatedAt: time.Now()})
 			s.Get(id)
 			s.List()
-			s.Update(id, func(l *Loop) { l.Status = StatusRunning })
+			_ = s.Update(id, func(l *Loop) { l.Status = StatusRunning })
 		}(i)
 	}
 	wg.Wait()
@@ -116,7 +116,7 @@ func TestConcurrentAccess(t *testing.T) {
 func TestAtomicFlush(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "loops.json")
 	s, _ := New(path)
-	s.Save(&Loop{ID: "a", GitURL: "https://example.com/repo.git", CreatedAt: time.Now()})
+	_ = s.Save(&Loop{ID: "a", GitURL: "https://example.com/repo.git", CreatedAt: time.Now()})
 
 	// Reload from disk and verify data survived.
 	s2, err := New(path)

@@ -36,10 +36,9 @@ func SetupWebSocket(app *fiber.App, bus *events.EventBus, logger *slog.Logger) {
 		logger.Debug("ws connected", "sub_id", subID, "loop_id", loopID)
 
 		// I4: Set up ping/pong to detect dead connections.
-		c.SetReadDeadline(time.Now().Add(wsPongWait))
+		_ = c.SetReadDeadline(time.Now().Add(wsPongWait))
 		c.SetPongHandler(func(string) error {
-			c.SetReadDeadline(time.Now().Add(wsPongWait))
-			return nil
+			return c.SetReadDeadline(time.Now().Add(wsPongWait))
 		})
 
 		// Read pump — closes done channel when the client disconnects.

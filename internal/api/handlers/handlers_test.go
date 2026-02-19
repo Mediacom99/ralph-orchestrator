@@ -71,7 +71,7 @@ func TestListEmpty(t *testing.T) {
 		t.Errorf("status = %d, want 200", resp.StatusCode)
 	}
 	var loops []json.RawMessage
-	json.NewDecoder(resp.Body).Decode(&loops)
+	_ = json.NewDecoder(resp.Body).Decode(&loops)
 	if len(loops) != 0 {
 		t.Errorf("expected empty list, got %d items", len(loops))
 	}
@@ -79,8 +79,8 @@ func TestListEmpty(t *testing.T) {
 
 func TestListWithData(t *testing.T) {
 	app, st := setupTestApp(t)
-	st.Save(&store.Loop{ID: "test1", Status: store.StatusStopped})
-	st.Save(&store.Loop{ID: "test2", Status: store.StatusStopped})
+	_ = st.Save(&store.Loop{ID: "test1", Status: store.StatusStopped})
+	_ = st.Save(&store.Loop{ID: "test2", Status: store.StatusStopped})
 
 	req, _ := http.NewRequest("GET", "/api/loops", nil)
 	resp, err := app.Test(req)
@@ -88,7 +88,7 @@ func TestListWithData(t *testing.T) {
 		t.Fatal(err)
 	}
 	var loops []json.RawMessage
-	json.NewDecoder(resp.Body).Decode(&loops)
+	_ = json.NewDecoder(resp.Body).Decode(&loops)
 	if len(loops) != 2 {
 		t.Errorf("expected 2 loops, got %d", len(loops))
 	}
