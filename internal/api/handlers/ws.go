@@ -17,8 +17,8 @@ const (
 	wsPingPeriod = (wsPongWait * 9) / 10
 )
 
-func SetupWebSocket(app *fiber.App, bus *events.EventBus, logger *slog.Logger) {
-	app.Use("/ws", func(c *fiber.Ctx) error {
+func SetupWebSocket(app *fiber.App, bus *events.EventBus, logger *slog.Logger, authMiddleware fiber.Handler) {
+	app.Use("/ws", authMiddleware, func(c *fiber.Ctx) error {
 		if websocket.IsWebSocketUpgrade(c) {
 			return c.Next()
 		}

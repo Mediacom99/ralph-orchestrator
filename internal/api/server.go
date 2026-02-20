@@ -43,15 +43,14 @@ func NewServer(ctx context.Context, cfg *config.Config, st *store.Store, setting
 		AllowMethods: "GET,POST,PUT,DELETE,OPTIONS",
 		AllowHeaders: "Content-Type, Authorization",
 	}))
-	app.Use(middleware.BearerAuth(cfg.APIKey))
-
 	s := &Server{app: app, config: cfg, logger: logger}
 
 	// B5: Pass server-scoped context so background goroutines can be cancelled on shutdown.
 	h := handlers.NewLoopHandler(ctx, st, settings, mgr, bus, cfg, logger)
 	sh := handlers.NewSettingsHandler(settings)
 
-	api := app.Group("/api")
+	// Auth only on /api and /ws routes — SPA static files are public.
+	api := app.Group("/api", middleware.BearerAuth(cfg.APIKey))
 	api.Get("/health", handlers.Health)
 	api.Get("/settings", sh.Get)
 	api.Put("/settings", sh.Update)
@@ -63,7 +62,7 @@ func NewServer(ctx context.Context, cfg *config.Config, st *store.Store, setting
 	api.Delete("/loops/:id", h.Delete)
 	api.Get("/loops/:id/logs", h.Logs)
 
-	handlers.SetupWebSocket(app, bus, logger)
+	handlers.SetupWebSocket(app, bus, logger, middleware.BearerAuth(cfg.APIKey))
 
 	s.setupSPA()
 
