@@ -76,7 +76,7 @@ export const api = {
 
   getSettings: () => request<SettingsResponse>("/settings"),
 
-  updateSettings: (data: { github_token: string }) =>
+  updateSettings: (data: { github_token?: string; anthropic_api_key?: string }) =>
     request<SettingsResponse>("/settings", {
       method: "PUT",
       body: JSON.stringify(data),

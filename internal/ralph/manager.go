@@ -20,7 +20,7 @@ func NewManager(logger *slog.Logger) *Manager {
 	}
 }
 
-func (m *Manager) Start(ctx context.Context, loopID, dir string) (*Runner, error) {
+func (m *Manager) Start(ctx context.Context, loopID, dir string, envOverrides map[string]string) (*Runner, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -28,7 +28,7 @@ func (m *Manager) Start(ctx context.Context, loopID, dir string) (*Runner, error
 		return nil, fmt.Errorf("loop %s already running", loopID)
 	}
 
-	r := NewRunner(loopID, dir, m.logger)
+	r := NewRunner(loopID, dir, envOverrides, m.logger)
 	if err := r.Start(ctx); err != nil {
 		return nil, err
 	}

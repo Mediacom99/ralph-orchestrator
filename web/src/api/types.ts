@@ -25,6 +25,9 @@ export interface ProgressData {
 export interface SettingsResponse {
   github_token: string;
   has_github_token: boolean;
+  anthropic_api_key: string;
+  has_anthropic_api_key: boolean;
+  auth_mode: "subscription" | "api_key" | "none";
 }
 
 export interface Loop {

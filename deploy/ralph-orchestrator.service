@@ -1,0 +1,22 @@
+[Unit]
+Description=Ralph Orchestrator
+After=network-online.target
+
+[Service]
+Type=simple
+User=ralph
+Group=ralph
+WorkingDirectory=/opt/ralph-orchestrator
+ExecStart=/opt/ralph-orchestrator/orchestrator
+Environment=PORT=8080
+Environment=DATA_DIR=/opt/ralph-orchestrator/data
+EnvironmentFile=-/opt/ralph-orchestrator/.env
+Restart=on-failure
+RestartSec=5
+ProtectSystem=strict
+ProtectHome=no
+ReadWritePaths=/opt/ralph-orchestrator/data
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

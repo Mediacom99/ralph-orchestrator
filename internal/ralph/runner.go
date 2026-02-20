@@ -13,23 +13,25 @@ import (
 )
 
 type Runner struct {
-	loopID   string
-	dir      string
-	cmd      *exec.Cmd
-	cancelFn context.CancelFunc
-	done     chan struct{}
-	exitErr  error
-	stopping bool // I1: prevents concurrent Stop() from duplicating work
-	mu       sync.Mutex
-	logger   *slog.Logger
+	loopID       string
+	dir          string
+	envOverrides map[string]string
+	cmd          *exec.Cmd
+	cancelFn     context.CancelFunc
+	done         chan struct{}
+	exitErr      error
+	stopping     bool // I1: prevents concurrent Stop() from duplicating work
+	mu           sync.Mutex
+	logger       *slog.Logger
 }
 
-func NewRunner(loopID, dir string, logger *slog.Logger) *Runner {
+func NewRunner(loopID, dir string, envOverrides map[string]string, logger *slog.Logger) *Runner {
 	return &Runner{
-		loopID: loopID,
-		dir:    dir,
-		done:   make(chan struct{}),
-		logger: logger,
+		loopID:       loopID,
+		dir:          dir,
+		envOverrides: envOverrides,
+		done:         make(chan struct{}),
+		logger:       logger,
 	}
 }
 
@@ -47,7 +49,7 @@ func (r *Runner) Start(ctx context.Context) error {
 	r.cmd = exec.CommandContext(runCtx, "ralph")
 	r.cmd.Dir = r.dir
 	// I9: Only pass necessary env vars to the subprocess.
-	r.cmd.Env = filteredEnv()
+	r.cmd.Env = filteredEnv(r.envOverrides)
 	// Ensure ralph output goes to its own log files
 	r.cmd.Stdout = nil
 	r.cmd.Stderr = nil
@@ -159,17 +161,30 @@ func (r *Runner) ExitErr() error {
 
 // I9: filteredEnv returns only the environment variables the ralph
 // subprocess needs, avoiding leaking server secrets.
-func filteredEnv() []string {
+// Overrides take precedence over the process environment.
+func filteredEnv(overrides map[string]string) []string {
 	allowed := map[string]bool{
 		"PATH": true, "HOME": true, "USER": true, "SHELL": true,
 		"ANTHROPIC_API_KEY": true, "LANG": true, "TERM": true,
 		"TMPDIR": true, "XDG_CONFIG_HOME": true, "XDG_DATA_HOME": true,
+		"CLAUDE_CONFIG_DIR": true,
+	}
+	// Collect overridden keys so we skip the process-env version.
+	overridden := make(map[string]bool, len(overrides))
+	for k := range overrides {
+		overridden[k] = true
 	}
 	var env []string
 	for _, e := range os.Environ() {
 		key, _, _ := strings.Cut(e, "=")
-		if allowed[key] {
+		if allowed[key] && !overridden[key] {
 			env = append(env, e)
+		}
+	}
+	// Append overrides (only non-empty values).
+	for k, v := range overrides {
+		if v != "" {
+			env = append(env, k+"="+v)
 		}
 	}
 	return env

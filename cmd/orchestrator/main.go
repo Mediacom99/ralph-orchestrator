@@ -68,6 +68,16 @@ func main() {
 			}
 		}
 	}
+	// Seed Anthropic API key from env if not already persisted.
+	if settings.GetAnthropicAPIKey() == "" {
+		if envKey := os.Getenv("ANTHROPIC_API_KEY"); envKey != "" {
+			if err := settings.SetAnthropicAPIKey(envKey); err != nil {
+				logger.Error("failed to seed Anthropic API key from env", "error", err)
+			} else {
+				logger.Info("seeded Anthropic API key from ANTHROPIC_API_KEY env var")
+			}
+		}
+	}
 
 	// I5: Reconcile stale "running" loops on startup — log save errors at error level.
 	for _, loop := range st.List() {

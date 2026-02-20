@@ -9,7 +9,8 @@ import (
 
 // Settings holds application-level configuration persisted to disk.
 type Settings struct {
-	GitHubToken string `json:"github_token,omitempty"`
+	GitHubToken    string `json:"github_token,omitempty"`
+	AnthropicAPIKey string `json:"anthropic_api_key,omitempty"`
 }
 
 // SettingsStore is a JSON-file-backed store for application settings.
@@ -49,6 +50,19 @@ func (s *SettingsStore) SetGitHubToken(token string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.settings.GitHubToken = token
+	return s.flush()
+}
+
+func (s *SettingsStore) GetAnthropicAPIKey() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.settings.AnthropicAPIKey
+}
+
+func (s *SettingsStore) SetAnthropicAPIKey(key string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.settings.AnthropicAPIKey = key
 	return s.flush()
 }
 

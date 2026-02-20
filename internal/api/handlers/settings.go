@@ -1,6 +1,9 @@
 package handlers
 
 import (
+	"os"
+	"path/filepath"
+
 	"github.com/gofiber/fiber/v2"
 
 	"github.com/edoardo/ralph-orchestrator/internal/store"
@@ -15,19 +18,27 @@ func NewSettingsHandler(settings *store.SettingsStore) *SettingsHandler {
 }
 
 type settingsResponse struct {
-	GitHubToken    string `json:"github_token"`
-	HasGitHubToken bool   `json:"has_github_token"`
+	GitHubToken       string `json:"github_token"`
+	HasGitHubToken    bool   `json:"has_github_token"`
+	AnthropicAPIKey   string `json:"anthropic_api_key"`
+	HasAnthropicKey   bool   `json:"has_anthropic_api_key"`
+	AuthMode          string `json:"auth_mode"`
 }
 
 type settingsUpdateRequest struct {
-	GitHubToken *string `json:"github_token"`
+	GitHubToken     *string `json:"github_token"`
+	AnthropicAPIKey *string `json:"anthropic_api_key"`
 }
 
 func (h *SettingsHandler) Get(c *fiber.Ctx) error {
-	token := h.settings.GetGitHubToken()
+	ghToken := h.settings.GetGitHubToken()
+	apiKey := h.settings.GetAnthropicAPIKey()
 	return c.JSON(settingsResponse{
-		GitHubToken:    maskToken(token),
-		HasGitHubToken: token != "",
+		GitHubToken:     maskToken(ghToken),
+		HasGitHubToken:  ghToken != "",
+		AnthropicAPIKey: maskToken(apiKey),
+		HasAnthropicKey: apiKey != "",
+		AuthMode:        detectAuthMode(apiKey),
 	})
 }
 
@@ -41,11 +52,36 @@ func (h *SettingsHandler) Update(c *fiber.Ctx) error {
 			return c.Status(500).JSON(fiber.Map{"error": "failed to save settings"})
 		}
 	}
-	token := h.settings.GetGitHubToken()
+	if req.AnthropicAPIKey != nil {
+		if err := h.settings.SetAnthropicAPIKey(*req.AnthropicAPIKey); err != nil {
+			return c.Status(500).JSON(fiber.Map{"error": "failed to save settings"})
+		}
+	}
+	ghToken := h.settings.GetGitHubToken()
+	apiKey := h.settings.GetAnthropicAPIKey()
 	return c.JSON(settingsResponse{
-		GitHubToken:    maskToken(token),
-		HasGitHubToken: token != "",
+		GitHubToken:     maskToken(ghToken),
+		HasGitHubToken:  ghToken != "",
+		AnthropicAPIKey: maskToken(apiKey),
+		HasAnthropicKey: apiKey != "",
+		AuthMode:        detectAuthMode(apiKey),
 	})
+}
+
+// detectAuthMode checks how Claude authentication is configured.
+// Priority: subscription credentials file > API key > none.
+func detectAuthMode(apiKey string) string {
+	home, err := os.UserHomeDir()
+	if err == nil {
+		credPath := filepath.Join(home, ".claude", ".credentials.json")
+		if _, err := os.Stat(credPath); err == nil {
+			return "subscription"
+		}
+	}
+	if apiKey != "" || os.Getenv("ANTHROPIC_API_KEY") != "" {
+		return "api_key"
+	}
+	return "none"
 }
 
 func maskToken(token string) string {

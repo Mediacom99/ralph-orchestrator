@@ -164,7 +164,12 @@ func (h *LoopHandler) Start(c *fiber.Ctx) error {
 }
 
 func (h *LoopHandler) startLoop(loop *store.Loop) {
-	runner, err := h.mgr.Start(context.Background(), loop.ID, loop.LocalPath)
+	// Build env overrides: settings-stored API key takes precedence over process env.
+	var envOverrides map[string]string
+	if key := h.settings.GetAnthropicAPIKey(); key != "" {
+		envOverrides = map[string]string{"ANTHROPIC_API_KEY": key}
+	}
+	runner, err := h.mgr.Start(context.Background(), loop.ID, loop.LocalPath, envOverrides)
 	if err != nil {
 		// If the manager says "already running" and it IS running, treat as benign race.
 		if h.mgr.IsRunning(loop.ID) {
