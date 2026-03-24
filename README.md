@@ -1,87 +1,132 @@
-# Ralph Orchestrator
+<div align="center">
 
-A Go REST API that orchestrates AI-powered development pipelines. Point it at a GitHub repo, define your objectives, and let AI agents handle the implementation cycle — planning, coding, testing, and committing.
+# 🤖 Ralph Orchestrator
 
-Built with **Go**, **Fiber**, **SQLite**, and **WebSockets** for real-time monitoring.
+**AI-powered development pipelines, orchestrated.**
 
-## What it does
+Point it at a repo. Define your objectives. Watch AI agents plan, code, test, and commit.
 
-Ralph Orchestrator manages "loops" — automated development cycles where an AI coding agent (Claude Code) clones a repo, reads the objectives, implements changes, runs tests, and commits. You control everything through a web dashboard or the REST API.
+[![CI](https://github.com/Mediacom99/ralph-orchestrator/actions/workflows/ci.yml/badge.svg)](https://github.com/Mediacom99/ralph-orchestrator/actions/workflows/ci.yml)
+![Go](https://img.shields.io/badge/Go-1.24-00ADD8?logo=go&logoColor=white)
+![Fiber](https://img.shields.io/badge/Fiber-v2-00ACD7?logo=go&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white)
+![License](https://img.shields.io/badge/License-MIT-green)
 
-Each loop:
-1. Clones the target repository
-2. Reads the project objectives (PROMPT.md)
-3. Executes the AI agent in a sandboxed environment
-4. Streams real-time progress via WebSocket
-5. Commits changes back to the repo
+</div>
 
-## Architecture
+---
+
+## ⚡ What is this?
+
+Ralph Orchestrator is a **Go REST API** that manages automated development cycles ("loops"). Each loop:
+
+```
+📦 Clone repo → 📋 Read objectives → 🤖 Run AI agent → ✅ Test → 📝 Commit
+```
+
+Everything streams in real-time through **WebSockets** to a built-in React dashboard.
+
+---
+
+## 🏗️ Architecture
+
+```
+┌─────────────────────────────────────────────────┐
+│                  Ralph Orchestrator              │
+├──────────────┬──────────────┬───────────────────┤
+│   🌐 API     │   🧠 Core    │   💾 Storage      │
+│              │              │                   │
+│  Fiber v2    │  Loop Mgr    │  SQLite           │
+│  WebSocket   │  Git Clone   │  Settings Store   │
+│  Auth MW     │  Agent Runner│  Loop State       │
+│  SPA Embed   │  Event Bus   │                   │
+├──────────────┴──────────────┴───────────────────┤
+│                 🎨 Dashboard                     │
+│           React + TypeScript + Vite              │
+└─────────────────────────────────────────────────┘
+```
 
 ```
 cmd/orchestrator/       → Entry point
 internal/
-  api/                  → Fiber HTTP server + WebSocket handlers
-    handlers/           → REST endpoints (loops, health, settings)
-    middleware/         → Auth middleware (API key)
-  config/              → Environment-based configuration
-  events/              → Event bus for real-time updates
-  git/                 → Repository cloning and management
-  ralph/               → AI agent lifecycle (install, run, stop)
-  store/               → SQLite persistence (loops, settings)
-web/                   → React + TypeScript dashboard
-deploy/                → Dockerfile, systemd service, install script
+  api/                  → HTTP server, handlers, middleware
+  config/               → Environment-based config
+  events/               → Real-time event bus
+  git/                  → Repository cloning
+  ralph/                → AI agent lifecycle management
+  store/                → Persistence layer
+web/                    → React + TypeScript dashboard
+deploy/                 → Docker, systemd, install script
 ```
 
-## Quick Start
+---
+
+## 🚀 Quick Start
 
 ```bash
-# Clone and build
+# Clone
 git clone https://github.com/Mediacom99/ralph-orchestrator.git
 cd ralph-orchestrator
-go build -o ralph ./cmd/orchestrator
 
 # Configure
 cp .env.example .env
-# Edit .env with your GitHub token and Anthropic API key
+# Add your GitHub token + Anthropic API key
 
-# Run
+# Build & Run
+go build -o ralph ./cmd/orchestrator
 ./ralph
 ```
 
-The dashboard is available at `http://localhost:PORT` (default: 3001).
+Dashboard at `http://localhost:3001`
 
-## API
+---
+
+## 📡 API
 
 | Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/health` | Health check |
-| GET | `/api/loops` | List all loops |
-| POST | `/api/loops` | Create a new loop |
-| POST | `/api/loops/:id/start` | Start a loop |
-| POST | `/api/loops/:id/stop` | Stop a loop |
-| DELETE | `/api/loops/:id` | Delete a loop |
-| GET | `/api/settings` | Get settings |
-| PUT | `/api/settings` | Update settings |
-| GET | `/ws` | WebSocket for real-time events |
+|:------:|----------|-------------|
+| `GET` | `/api/health` | Health check |
+| `GET` | `/api/loops` | List all loops |
+| `POST` | `/api/loops` | Create a new loop |
+| `POST` | `/api/loops/:id/start` | Start a loop |
+| `POST` | `/api/loops/:id/stop` | Stop a loop |
+| `DELETE` | `/api/loops/:id` | Delete a loop |
+| `GET` | `/api/settings` | Get settings |
+| `PUT` | `/api/settings` | Update settings |
+| `WS` | `/ws` | Real-time events stream |
 
-## Deployment
+---
 
-Docker and systemd configurations are included in `deploy/`. See [DEPLOY.md](DEPLOY.md) for detailed instructions.
+## 🐳 Deploy
 
 ```bash
 # Docker
 docker build -t ralph-orchestrator .
 docker run -p 3001:3001 --env-file .env ralph-orchestrator
+
+# Or systemd — see deploy/ folder
 ```
 
-## Tech Stack
+Full deployment guide → [DEPLOY.md](DEPLOY.md)
 
-- **Go 1.24** with Fiber v2 (HTTP) and gorilla/websocket
-- **SQLite** via JSON file store for persistence
-- **React + TypeScript** dashboard with Vite
-- **Docker** + systemd for deployment
-- **GitHub Actions** CI pipeline
+---
 
-## License
+## 🛠️ Tech Stack
+
+| | Technology | Role |
+|---|---|---|
+| 🔵 | **Go 1.24** | Backend runtime |
+| ⚡ | **Fiber v2** | HTTP framework |
+| 🔌 | **WebSocket** | Real-time streaming |
+| 💾 | **SQLite** | Persistence |
+| ⚛️ | **React + TypeScript** | Dashboard |
+| 🏗️ | **Vite** | Frontend build |
+| 🐳 | **Docker** | Containerization |
+| ⚙️ | **GitHub Actions** | CI pipeline |
+
+---
+
+## 📄 License
 
 MIT
+
