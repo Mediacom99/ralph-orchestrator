@@ -24,7 +24,7 @@ RUN apk add --no-cache git bash jq coreutils
 RUN npm install -g @anthropic-ai/claude-code
 
 # Create app user before installing ralph (install.sh writes to $HOME)
-RUN addgroup -g 1000 app && adduser -D -u 1000 -G app app
+RUN addgroup -S app && adduser -S -G app app
 RUN mkdir -p /data && chown app:app /data
 
 # Install ralph-claude-code as app user so paths go to /home/app/
