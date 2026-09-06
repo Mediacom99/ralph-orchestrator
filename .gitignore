@@ -17,3 +17,7 @@ data/
 # Frontend
 web/node_modules/
 web/dist/
+
+# Debug artifacts
+.playwright-mcp/
+dashboard-empty.png

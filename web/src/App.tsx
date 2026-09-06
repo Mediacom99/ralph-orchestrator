@@ -1,67 +1,177 @@
-import { useEffect, useState } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useLoops } from "./hooks/useLoops";
-import LoopList from "./components/LoopList";
-import NewLoopForm from "./components/NewLoopForm";
-import AuthPrompt from "./components/AuthPrompt";
-import SettingsPanel from "./components/SettingsPanel";
+import { api } from "./api/client";
+import { addToast } from "./hooks/useToast";
+import { Header } from "./components/Header";
+import { LoopList } from "./components/LoopList";
+import { LoopDetail } from "./components/LoopDetail";
+import { NewLoopForm } from "./components/NewLoopForm";
+import { SettingsPanel } from "./components/SettingsPanel";
+import { AuthPrompt } from "./components/AuthPrompt";
+import { Modal } from "./components/Modal";
+import { SlideOver } from "./components/SlideOver";
+import { ToastContainer } from "./components/Toast";
+import type { Loop } from "./api/types";
 
 export default function App() {
-  const { loops, loading, error, refresh, wsConnected } = useLoops();
-  const [needsAuth, setNeedsAuth] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const { loops, loading, error, wsConnected, refresh } = useLoops();
+  const [showNewLoop, setShowNewLoop] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [authRequired, setAuthRequired] = useState(false);
+  const [acting, setActing] = useState<string | null>(null);
 
+  const selectedLoop: Loop | undefined = selectedId
+    ? loops.find((l) => l.id === selectedId)
+    : undefined;
+
+  // Close detail if loop disappears (e.g. deleted)
   useEffect(() => {
-    const handler = () => setNeedsAuth(true);
-    window.addEventListener("ralph:auth-required", handler);
-    return () => window.removeEventListener("ralph:auth-required", handler);
+    if (selectedId && !loops.find((l) => l.id === selectedId)) {
+      setSelectedId(null);
+    }
+  }, [loops, selectedId]);
+
+  // Listen for auth-required events from API client
+  useEffect(() => {
+    function handleAuth() {
+      setAuthRequired(true);
+    }
+    window.addEventListener("ralph:auth-required", handleAuth);
+    return () => window.removeEventListener("ralph:auth-required", handleAuth);
   }, []);
 
+  // Show errors as toasts
+  useEffect(() => {
+    if (error) addToast("error", error);
+  }, [error]);
+
+  const handleStart = useCallback(
+    async (id: string) => {
+      setActing(id);
+      try {
+        await api.startLoop(id);
+        addToast("success", "Loop started");
+        await refresh();
+      } catch (err) {
+        addToast(
+          "error",
+          err instanceof Error ? err.message : "Failed to start",
+        );
+      } finally {
+        setActing(null);
+      }
+    },
+    [refresh],
+  );
+
+  const handleStop = useCallback(
+    async (id: string) => {
+      setActing(id);
+      try {
+        await api.stopLoop(id);
+        addToast("success", "Loop stopped");
+        await refresh();
+      } catch (err) {
+        addToast(
+          "error",
+          err instanceof Error ? err.message : "Failed to stop",
+        );
+      } finally {
+        setActing(null);
+      }
+    },
+    [refresh],
+  );
+
+  const handleDelete = useCallback(
+    async (id: string) => {
+      setActing(id);
+      try {
+        await api.deleteLoop(id);
+        addToast("success", "Loop deleted");
+        setSelectedId(null);
+        await refresh();
+      } catch (err) {
+        addToast(
+          "error",
+          err instanceof Error ? err.message : "Failed to delete",
+        );
+      } finally {
+        setActing(null);
+      }
+    },
+    [refresh],
+  );
+
+  if (authRequired) {
+    return (
+      <AuthPrompt
+        onAuthenticated={() => {
+          setAuthRequired(false);
+          refresh();
+        }}
+      />
+    );
+  }
+
   return (
-    <div className="max-w-6xl mx-auto px-4 py-8">
-      {needsAuth && (
-        <AuthPrompt
-          onAuthenticated={() => {
-            setNeedsAuth(false);
-            refresh();
-          }}
+    <div className="min-h-screen bg-gray-950 text-gray-100">
+      <Header
+        wsConnected={wsConnected}
+        onNewLoop={() => setShowNewLoop(true)}
+        onSettings={() => setShowSettings(true)}
+      />
+
+      <main className="max-w-7xl mx-auto px-4 py-6">
+        <LoopList
+          loops={loops}
+          loading={loading}
+          onSelect={setSelectedId}
+          onStart={handleStart}
+          onStop={handleStop}
+          onNewLoop={() => setShowNewLoop(true)}
+          acting={acting}
         />
-      )}
+      </main>
 
-      {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
+      <Modal
+        open={showNewLoop}
+        onClose={() => setShowNewLoop(false)}
+        title="New Loop"
+      >
+        <NewLoopForm
+          onCreated={refresh}
+          onClose={() => setShowNewLoop(false)}
+        />
+      </Modal>
 
-      {/* Header */}
-      <div className="flex items-center justify-between mb-8">
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold text-white">Ralph Orchestrator</h1>
-          <span
-            className={`inline-block w-2 h-2 rounded-full ${wsConnected ? "bg-emerald-500" : "bg-gray-500"}`}
-            title={wsConnected ? "WebSocket connected" : "WebSocket disconnected"}
+      <SlideOver
+        open={showSettings}
+        onClose={() => setShowSettings(false)}
+        title="Settings"
+      >
+        <SettingsPanel onClose={() => setShowSettings(false)} />
+      </SlideOver>
+
+      <SlideOver
+        open={!!selectedLoop}
+        onClose={() => setSelectedId(null)}
+        title={selectedLoop?.repo_name ?? ""}
+        wide
+      >
+        {selectedLoop && (
+          <LoopDetail
+            loop={selectedLoop}
+            onStart={handleStart}
+            onStop={handleStop}
+            onDelete={handleDelete}
+            acting={acting}
           />
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setSettingsOpen(true)}
-            className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded-lg cursor-pointer"
-          >
-            Settings
-          </button>
-          <NewLoopForm onCreated={refresh} />
-        </div>
-      </div>
+        )}
+      </SlideOver>
 
-      {/* Status bar */}
-      {error && (
-        <div className="mb-4 px-4 py-2 bg-red-900/40 border border-red-800 rounded text-sm text-red-300">
-          {error}
-        </div>
-      )}
-
-      {/* Main content */}
-      {loading ? (
-        <div className="text-center py-16 text-gray-500">Loading...</div>
-      ) : (
-        <LoopList loops={loops} onRefresh={refresh} />
-      )}
+      <ToastContainer />
     </div>
   );
 }

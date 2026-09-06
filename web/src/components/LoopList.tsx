@@ -1,27 +1,52 @@
 import type { Loop } from "../api/types";
-import LoopCard from "./LoopCard";
+import { LoopCard } from "./LoopCard";
+import { SkeletonCard } from "./SkeletonCard";
+import { EmptyState } from "./EmptyState";
 
 interface LoopListProps {
   loops: Loop[];
-  onRefresh: () => Promise<void>;
+  loading: boolean;
+  onSelect: (id: string) => void;
+  onStart: (id: string) => void;
+  onStop: (id: string) => void;
+  onNewLoop: () => void;
+  acting: string | null;
 }
 
-export default function LoopList({ loops, onRefresh }: LoopListProps) {
-  if (loops.length === 0) {
+export function LoopList({
+  loops,
+  loading,
+  onSelect,
+  onStart,
+  onStop,
+  onNewLoop,
+  acting,
+}: LoopListProps) {
+  if (loading) {
     return (
-      <div className="text-center py-16 text-gray-500">
-        <p className="text-lg">No loops yet</p>
-        <p className="text-sm mt-1">
-          Add a ralph-enabled git repo to get started
-        </p>
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <SkeletonCard />
+        <SkeletonCard />
+        <SkeletonCard />
       </div>
     );
   }
 
+  if (loops.length === 0) {
+    return <EmptyState onNewLoop={onNewLoop} />;
+  }
+
   return (
-    <div className="grid gap-4 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
       {loops.map((loop) => (
-        <LoopCard key={loop.id} loop={loop} onRefresh={onRefresh} />
+        <LoopCard
+          key={loop.id}
+          loop={loop}
+          onSelect={onSelect}
+          onStart={onStart}
+          onStop={onStop}
+          acting={acting}
+        />
       ))}
     </div>
   );

@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
-import { describe, it, expect } from "vitest";
-import LoopCard from "./LoopCard";
+import { describe, it, expect, vi } from "vitest";
+import { LoopCard } from "./LoopCard";
 import type { Loop } from "../api/types";
 
 function makeLoop(overrides: Partial<Loop> = {}): Loop {
@@ -16,23 +16,49 @@ function makeLoop(overrides: Partial<Loop> = {}): Loop {
 }
 
 describe("LoopCard", () => {
-  const noop = async () => {};
+  const noop = vi.fn();
 
   it("renders name, status, and URL", () => {
-    render(<LoopCard loop={makeLoop()} onRefresh={noop} />);
+    render(
+      <LoopCard
+        loop={makeLoop()}
+        onSelect={noop}
+        onStart={noop}
+        onStop={noop}
+        acting={null}
+      />,
+    );
     expect(screen.getByText("repo")).toBeInTheDocument();
     expect(screen.getByText("Stopped")).toBeInTheDocument();
-    expect(screen.getByText("https://github.com/user/repo.git")).toBeInTheDocument();
+    expect(
+      screen.getByText("https://github.com/user/repo.git"),
+    ).toBeInTheDocument();
   });
 
   it("shows Start button when stopped", () => {
-    render(<LoopCard loop={makeLoop({ status: "stopped" })} onRefresh={noop} />);
+    render(
+      <LoopCard
+        loop={makeLoop({ status: "stopped" })}
+        onSelect={noop}
+        onStart={noop}
+        onStop={noop}
+        acting={null}
+      />,
+    );
     expect(screen.getByText("Start")).toBeInTheDocument();
     expect(screen.queryByText("Stop")).not.toBeInTheDocument();
   });
 
   it("shows Stop button when running", () => {
-    render(<LoopCard loop={makeLoop({ status: "running" })} onRefresh={noop} />);
+    render(
+      <LoopCard
+        loop={makeLoop({ status: "running" })}
+        onSelect={noop}
+        onStart={noop}
+        onStop={noop}
+        acting={null}
+      />,
+    );
     expect(screen.getByText("Stop")).toBeInTheDocument();
     expect(screen.queryByText("Start")).not.toBeInTheDocument();
   });
@@ -46,7 +72,15 @@ describe("LoopCard", () => {
         elapsed_seconds: 120,
       },
     });
-    render(<LoopCard loop={loop} onRefresh={noop} />);
+    render(
+      <LoopCard
+        loop={loop}
+        onSelect={noop}
+        onStart={noop}
+        onStop={noop}
+        acting={null}
+      />,
+    );
     expect(screen.getByText("50%")).toBeInTheDocument();
     expect(screen.getByText("5/10 tasks")).toBeInTheDocument();
   });

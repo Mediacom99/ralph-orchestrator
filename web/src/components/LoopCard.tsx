@@ -1,172 +1,105 @@
-import { useEffect, useRef, useState } from "react";
-import type { Loop, LoopStatus } from "../api/types";
-import { api } from "../api/client";
-import ProgressBar from "./ProgressBar";
-import LiveLog from "./LiveLog";
-
-const statusConfig: Record<LoopStatus, { label: string; color: string }> = {
-  cloning: { label: "Cloning", color: "bg-blue-500" },
-  running: { label: "Running", color: "bg-emerald-500" },
-  stopped: { label: "Stopped", color: "bg-gray-500" },
-  complete: { label: "Complete", color: "bg-green-500" },
-  failed: { label: "Failed", color: "bg-red-500" },
-  error: { label: "Error", color: "bg-red-500" },
-};
+import type { Loop } from "../api/types";
+import { StatusBadge } from "./StatusBadge";
+import { ProgressBar } from "./ProgressBar";
+import { PlayIcon, StopIcon, ChevronRightIcon, ClockIcon } from "./icons";
 
 interface LoopCardProps {
   loop: Loop;
-  onRefresh: () => Promise<void>;
+  onSelect: (id: string) => void;
+  onStart: (id: string) => void;
+  onStop: (id: string) => void;
+  acting: string | null;
 }
 
-export default function LoopCard({ loop, onRefresh }: LoopCardProps) {
-  const [showLogs, setShowLogs] = useState(false);
-  const [acting, setActing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const mountedRef = useRef(true);
+function formatElapsed(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
+  return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
+}
 
-  useEffect(() => {
-    return () => { mountedRef.current = false; };
-  }, []);
+const canStartStatuses = new Set(["stopped", "failed", "complete", "error"]);
+const canStopStatuses = new Set(["running", "cloning"]);
 
-  const status = statusConfig[loop.status] ?? statusConfig.error;
-
-  // B6: await onRefresh() so buttons stay disabled until fresh data arrives.
-  async function handleStart() {
-    setActing(true);
-    setError(null);
-    try {
-      await api.startLoop(loop.id);
-      await onRefresh();
-    } catch (err) {
-      if (mountedRef.current) setError(err instanceof Error ? err.message : "Action failed");
-    } finally {
-      if (mountedRef.current) setActing(false);
-    }
-  }
-
-  async function handleStop() {
-    setActing(true);
-    setError(null);
-    try {
-      await api.stopLoop(loop.id);
-      await onRefresh();
-    } catch (err) {
-      if (mountedRef.current) setError(err instanceof Error ? err.message : "Action failed");
-    } finally {
-      if (mountedRef.current) setActing(false);
-    }
-  }
-
-  async function handleDelete() {
-    if (!confirm(`Delete loop ${loop.repo_name}? This removes the cloned repo.`))
-      return;
-    setActing(true);
-    setError(null);
-    try {
-      await api.deleteLoop(loop.id);
-      await onRefresh();
-    } catch (err) {
-      if (mountedRef.current) setError(err instanceof Error ? err.message : "Action failed");
-    } finally {
-      if (mountedRef.current) setActing(false);
-    }
-  }
-
-  const isRunning = loop.status === "running";
-  const canStart = loop.status === "stopped" || loop.status === "failed" || loop.status === "complete";
-
-  function formatElapsed(seconds: number): string {
-    if (seconds < 60) return `${seconds}s`;
-    if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
-    return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
-  }
+export function LoopCard({
+  loop,
+  onSelect,
+  onStart,
+  onStop,
+  acting,
+}: LoopCardProps) {
+  const isActing = acting === loop.id;
 
   return (
-    <>
-      <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 space-y-3">
-        {/* Header */}
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <h3 className="font-semibold text-white truncate">
-                {loop.repo_name}
-              </h3>
-              <span className="text-xs text-gray-500 shrink-0">{loop.id}</span>
-            </div>
-            <p className="text-xs text-gray-500 truncate mt-0.5">
-              {loop.git_url}
-            </p>
-          </div>
-          <span
-            className={`${status.color} text-white text-xs px-2 py-0.5 rounded-full shrink-0`}
-          >
-            {status.label}
-          </span>
+    <div
+      onClick={() => onSelect(loop.id)}
+      className="group rounded-xl border border-gray-800 bg-gray-900 hover:border-gray-700 hover:bg-gray-900/80 p-5 cursor-pointer transition-colors"
+    >
+      {/* Header */}
+      <div className="flex items-start justify-between mb-3">
+        <div className="min-w-0 flex-1">
+          <h3 className="text-sm font-semibold text-white truncate">
+            {loop.repo_name}
+          </h3>
+          <p className="text-xs text-gray-500 truncate mt-0.5">
+            {loop.git_url}
+          </p>
         </div>
+        <StatusBadge status={loop.status} />
+      </div>
 
-        {/* Stats */}
+      {/* Stats */}
+      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-400 mb-3">
         {loop.ralph_status && (
-          <div className="flex gap-4 text-xs text-gray-400">
-            <span>Loop #{loop.ralph_status.loop_count}</span>
-            <span>Calls: {loop.ralph_status.calls_made}</span>
-            {loop.progress && loop.progress.elapsed_seconds > 0 && (
-              <span>{formatElapsed(loop.progress.elapsed_seconds)}</span>
-            )}
-          </div>
+          <>
+            <span>Loop {loop.ralph_status.loop_count}</span>
+            <span>{loop.ralph_status.calls_made} calls</span>
+          </>
         )}
+        {loop.progress && loop.progress.elapsed_seconds > 0 && (
+          <span className="inline-flex items-center gap-1">
+            <ClockIcon className="w-3 h-3" />
+            {formatElapsed(loop.progress.elapsed_seconds)}
+          </span>
+        )}
+      </div>
 
-        {/* Progress */}
-        {loop.progress && loop.progress.tasks_total > 0 && (
+      {/* Progress */}
+      {loop.progress && loop.progress.tasks_total > 0 && (
+        <div className="mb-3">
           <ProgressBar
             percentage={loop.progress.percentage}
             done={loop.progress.tasks_done}
             total={loop.progress.tasks_total}
           />
-        )}
+        </div>
+      )}
 
-        {/* Error */}
-        {error && <p className="text-xs text-red-400">{error}</p>}
-
-        {/* Actions */}
-        <div className="flex items-center gap-2 pt-1">
-          {canStart && (
+      {/* Actions */}
+      <div className="flex items-center justify-between pt-2 border-t border-gray-800/50">
+        <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
+          {canStartStatuses.has(loop.status) && (
             <button
-              onClick={handleStart}
-              disabled={acting}
-              className="text-xs px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded cursor-pointer disabled:opacity-50"
+              onClick={() => onStart(loop.id)}
+              disabled={isActing}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/30 disabled:opacity-50"
             >
+              <PlayIcon className="w-3.5 h-3.5" />
               Start
             </button>
           )}
-          {isRunning && (
+          {canStopStatuses.has(loop.status) && (
             <button
-              onClick={handleStop}
-              disabled={acting}
-              className="text-xs px-3 py-1 bg-amber-600 hover:bg-amber-500 text-white rounded cursor-pointer disabled:opacity-50"
+              onClick={() => onStop(loop.id)}
+              disabled={isActing}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-red-600/20 text-red-400 hover:bg-red-600/30 disabled:opacity-50"
             >
+              <StopIcon className="w-3.5 h-3.5" />
               Stop
             </button>
           )}
-          <button
-            onClick={() => setShowLogs(true)}
-            className="text-xs px-3 py-1 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded cursor-pointer"
-          >
-            Logs
-          </button>
-          <div className="flex-1" />
-          <button
-            onClick={handleDelete}
-            disabled={acting}
-            className="text-xs px-2 py-1 text-red-400 hover:text-red-300 hover:bg-red-900/30 rounded cursor-pointer disabled:opacity-50"
-          >
-            Delete
-          </button>
         </div>
+        <ChevronRightIcon className="w-4 h-4 text-gray-600 group-hover:text-gray-400 transition-colors" />
       </div>
-
-      {showLogs && (
-        <LiveLog loopId={loop.id} onClose={() => setShowLogs(false)} />
-      )}
-    </>
+    </div>
   );
 }

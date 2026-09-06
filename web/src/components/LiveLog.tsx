@@ -1,75 +1,73 @@
-import { useEffect, useRef, useState } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { api } from "../api/client";
+import { ArrowDownIcon } from "./icons";
 
 interface LiveLogProps {
   loopId: string;
-  onClose: () => void;
 }
 
-export default function LiveLog({ loopId, onClose }: LiveLogProps) {
-  const [content, setContent] = useState("Loading...");
-  const bottomRef = useRef<HTMLDivElement>(null);
-  const scrollContainerRef = useRef<HTMLPreElement>(null);
-  // M3: Only auto-scroll when user is at the bottom.
-  const [autoScroll, setAutoScroll] = useState(true);
+export function LiveLog({ loopId }: LiveLogProps) {
+  const [lines, setLines] = useState("");
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [atBottom, setAtBottom] = useState(true);
+
+  const scrollToBottom = useCallback(() => {
+    const el = containerRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, []);
 
   useEffect(() => {
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
-  }, [onClose]);
+    const controller = new AbortController();
+    let mounted = true;
 
-  useEffect(() => {
-    let active = true;
-    const ac = new AbortController();
-    const doFetch = () => {
-      api.getLogs(loopId, 200, ac.signal)
-        .then((data) => { if (active) setContent(data.content || "(empty)"); })
-        .catch(() => { if (active) setContent("(no logs available)"); });
-    };
-    doFetch();
-    const t = setInterval(doFetch, 3000);
-    return () => { active = false; ac.abort(); clearInterval(t); };
-  }, [loopId]);
-
-  useEffect(() => {
-    if (autoScroll) {
-      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    async function fetchLogs() {
+      try {
+        const data = await api.getLogs(loopId, 200, controller.signal);
+        if (mounted) {
+          setLines(data.content || "");
+          if (atBottom) requestAnimationFrame(scrollToBottom);
+        }
+      } catch {
+        /* ignore abort / network errors */
+      }
     }
-  }, [content, autoScroll]);
+
+    fetchLogs();
+    const interval = setInterval(fetchLogs, 3000);
+    return () => {
+      mounted = false;
+      controller.abort();
+      clearInterval(interval);
+    };
+  }, [loopId, atBottom, scrollToBottom]);
 
   function handleScroll() {
-    const el = scrollContainerRef.current;
+    const el = containerRef.current;
     if (!el) return;
-    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 50;
-    setAutoScroll(atBottom);
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 50;
+    setAtBottom(nearBottom);
   }
 
   return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-      <div className="bg-gray-900 rounded-lg border border-gray-700 w-full max-w-4xl max-h-[80vh] flex flex-col">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-700">
-          <span className="text-sm font-medium text-gray-300">
-            Logs — {loopId}
-          </span>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-white text-sm cursor-pointer"
-          >
-            Close
-          </button>
-        </div>
-        <pre
-          ref={scrollContainerRef}
-          onScroll={handleScroll}
-          className="p-4 overflow-auto flex-1 text-xs text-gray-300 font-mono leading-relaxed whitespace-pre-wrap"
-        >
-          {content}
-          <div ref={bottomRef} />
-        </pre>
+    <div className="relative flex flex-col h-64 sm:h-80">
+      <div
+        ref={containerRef}
+        onScroll={handleScroll}
+        className="flex-1 overflow-y-auto bg-gray-950 rounded-lg p-3 font-mono text-xs text-gray-300 whitespace-pre-wrap break-all custom-scrollbar"
+      >
+        {lines || (
+          <span className="text-gray-600">Waiting for logs...</span>
+        )}
       </div>
+      {!atBottom && (
+        <button
+          onClick={scrollToBottom}
+          className="absolute bottom-2 right-2 p-1.5 rounded-full bg-gray-800 text-gray-400 hover:text-white shadow-lg"
+          title="Jump to bottom"
+        >
+          <ArrowDownIcon className="w-4 h-4" />
+        </button>
+      )}
     </div>
   );
 }

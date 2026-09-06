@@ -4,19 +4,20 @@ interface ProgressBarProps {
   total: number;
 }
 
-export default function ProgressBar({ percentage, done, total }: ProgressBarProps) {
+export function ProgressBar({ percentage, done, total }: ProgressBarProps) {
+  const clamped = Math.max(0, Math.min(100, percentage));
   return (
-    <div className="w-full">
+    <div>
       <div className="flex justify-between text-xs text-gray-400 mb-1">
-        <span>{Math.round(Math.max(0, Math.min(percentage, 100)))}%</span>
+        <span>{Math.round(clamped)}%</span>
         <span>
           {done}/{total} tasks
         </span>
       </div>
-      <div className="w-full h-2 bg-gray-700 rounded-full overflow-hidden">
+      <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
         <div
-          className="h-full bg-emerald-500 rounded-full transition-all duration-500"
-          style={{ width: `${Math.max(0, Math.min(percentage, 100))}%` }}
+          className="h-full bg-emerald-500 rounded-full transition-all duration-700 ease-out"
+          style={{ width: `${clamped}%` }}
         />
       </div>
     </div>

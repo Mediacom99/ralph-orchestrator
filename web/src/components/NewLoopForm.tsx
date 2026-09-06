@@ -1,86 +1,76 @@
 import { useState } from "react";
 import { api } from "../api/client";
+import { addToast } from "../hooks/useToast";
 
 interface NewLoopFormProps {
   onCreated: () => void;
+  onClose: () => void;
 }
 
-export default function NewLoopForm({ onCreated }: NewLoopFormProps) {
-  const [open, setOpen] = useState(false);
+export function NewLoopForm({ onCreated, onClose }: NewLoopFormProps) {
   const [url, setUrl] = useState("");
   const [autoStart, setAutoStart] = useState(true);
-  const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setError("");
+    if (!url.trim() || submitting) return;
     setSubmitting(true);
     try {
       await api.createLoop({ git_url: url.trim(), auto_start: autoStart });
-      setUrl("");
-      setOpen(false);
+      addToast("success", "Loop created successfully");
       onCreated();
+      onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create loop");
+      addToast(
+        "error",
+        err instanceof Error ? err.message : "Failed to create loop",
+      );
     } finally {
       setSubmitting(false);
     }
   }
 
-  if (!open) {
-    return (
-      <button
-        onClick={() => setOpen(true)}
-        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm rounded-lg cursor-pointer"
-      >
-        + New Loop
-      </button>
-    );
-  }
-
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="bg-gray-900 border border-gray-700 rounded-lg p-4 space-y-3"
-    >
-      <div>
-        <label className="block text-xs text-gray-400 mb-1">
-          Git repository URL
+    <form onSubmit={handleSubmit}>
+      <div className="mb-4">
+        <label className="block text-sm font-medium text-gray-300 mb-1.5">
+          Git URL
         </label>
         <input
           type="text"
           value={url}
           onChange={(e) => setUrl(e.target.value)}
-          placeholder="https://github.com/user/repo.git"
-          required
-          className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-sm text-white placeholder-gray-500 focus:outline-none focus:border-emerald-500"
+          placeholder="https://github.com/owner/repo.git"
+          className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-white placeholder-gray-500 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          autoFocus
         />
       </div>
-      <label className="flex items-center gap-2 text-sm text-gray-300">
+      <label className="flex items-center gap-2 mb-6 cursor-pointer">
         <input
           type="checkbox"
           checked={autoStart}
           onChange={(e) => setAutoStart(e.target.checked)}
-          className="rounded"
+          className="rounded border-gray-600 bg-gray-800 text-blue-600 focus:ring-blue-500"
         />
-        Auto-start after cloning
+        <span className="text-sm text-gray-300">
+          Start automatically after cloning
+        </span>
       </label>
-      {error && <p className="text-xs text-red-400">{error}</p>}
-      <div className="flex gap-2">
-        <button
-          type="submit"
-          disabled={submitting}
-          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm rounded cursor-pointer disabled:opacity-50"
-        >
-          {submitting ? "Creating..." : "Create"}
-        </button>
+      <div className="flex justify-end gap-3">
         <button
           type="button"
-          onClick={() => { setUrl(""); setAutoStart(true); setError(""); setOpen(false); }}
-          className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded cursor-pointer"
+          onClick={onClose}
+          className="px-4 py-2 rounded-lg text-sm font-medium text-gray-300 bg-gray-800 hover:bg-gray-700"
         >
           Cancel
+        </button>
+        <button
+          type="submit"
+          disabled={!url.trim() || submitting}
+          className="px-4 py-2 rounded-lg text-sm font-medium text-white bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {submitting ? "Creating..." : "Create Loop"}
         </button>
       </div>
     </form>

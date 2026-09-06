@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, it, expect } from "vitest";
-import ProgressBar from "./ProgressBar";
+import { ProgressBar } from "./ProgressBar";
 
 describe("ProgressBar", () => {
   it("renders percentage and task count", () => {
@@ -11,7 +11,7 @@ describe("ProgressBar", () => {
 
   it("clamps percentage between 0 and 100", () => {
     const { rerender } = render(
-      <ProgressBar percentage={150} done={5} total={4} />
+      <ProgressBar percentage={150} done={5} total={4} />,
     );
     expect(screen.getByText("100%")).toBeInTheDocument();
 
